@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aisec"
+version = "1.0.0"
+description = "Runtime Security Monitoring for Autonomous AI Agents"
+authors = [
+    {name = "Muhammad Muttaka", email = "255902@astanait.edu.kz"}
+]
+license = {text = "Apache-2.0"}
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "click>=8.1.7",
+    "rich>=13.7.0",
+    "prompt-toolkit>=3.0.43",
+    "pyyaml>=6.0.1",
+    "numpy>=1.26.0",
+]
+
+[project.scripts]
+aisec = "aisec.cli.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["venv*", "tests*"]
