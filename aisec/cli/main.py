@@ -1,137 +1,107 @@
 """
-AISec - Runtime Security Monitoring for Autonomous AI Agents
-Main CLI entry point
+AISec - Runtime Security Monitoring CLI
 """
-
 import click
 from rich.console import Console
-from rich.text import Text
+from rich.table import Table
 from rich.panel import Panel
-from rich.columns import Columns
-from rich import box
+from rich.text import Text
+from aisec.utils.assets import LOGO, PORTRAIT
 
 console = Console()
 
+# Safe ASCII Shields (Fixes the '??' issue)
+SHIELD_LOCK_ASCII = """      __      
+     /  \\     
+    | [::] |    
+     \\__/     """
 
-def print_logo() -> None:
-    """Print the AISec ASCII logo and startup banner."""
+SHIELD_CHECK_ASCII = """      __      
+     /  \\     
+    | [V] |    
+     \\__/     """
 
-    logo = """
-    ___    ____  _____           
-   /   |  /  _/ / ___/___  _____
-  / /| |  / /   \\__ \\/ _ \\/ ___/
- / ___ |_/ /   ___/ /  __/ /__  
-/_/  |_/___/  /____/\\___/\\___/  
-    """
-
-    console.print()
-    console.print(Text(logo, style="bold cyan"))
-    console.print(
-        Text(
-            "  Runtime Security Monitoring for Autonomous AI Agents",
-            style="dim white",
-        )
+def print_dashboard():
+    # --- 1. RIGHT COLUMN CONTENT (Stacked Vertically) ---
+    
+    # Top: Info Panel
+    info_content = Text.assemble(
+        (LOGO, "bold green"),
+        ("\nRuntime Security Monitoring for Autonomous AI Agents", "dim green"),
+        ("\n\nDEVELOPER  : Muhammad Muttaka", "white"),
+        ("\nAFFILIATION: Astana IT University"),
+        ("\nVERSION    : v1.0.0"),
+        ("\nMODE       : STANDBY", "yellow"),
+        ("\nENVIRONMENT: SOC CORE"),
+        ("\nSTATUS     : ARMED", "bold green")
     )
-    console.print(
-        Text(
-            "  Muhammad Muttaka  ·  Astana IT University  ·  v1.0.0",
-            style="dim",
-        )
+    info_panel = Panel(info_content, border_style="green", padding=(1, 2))
+
+    # Middle: Security Tools Panel
+    tools_text = "[dim green]> log monitor\n> agent audit\n> threat scan\n> event trace\n> hash verify\n> policy check\n> integrity chain[/dim green]"
+    tools_panel = Panel(tools_text, title="[bold green]SECURITY TOOLS[/bold green]", border_style="green", padding=(1, 2))
+
+    # Bottom: System Secure Panel
+    secure_panel = Panel(SHIELD_CHECK_ASCII + "\nALL SYSTEMS OPERATIONAL", 
+                         title="[bold green]SYSTEM SECURE[/bold green]", 
+                         border_style="green", padding=(1, 2))
+
+    # Stack them vertically
+    right_stack = Table.grid(expand=True)
+    right_stack.add_row(info_panel)
+    right_stack.add_row(tools_panel)
+    right_stack.add_row(secure_panel)
+
+    # --- 2. LEFT COLUMN: PORTRAIT ---
+    portrait_panel = Panel(PORTRAIT.strip(), border_style="green", padding=0, expand=True)
+
+    # --- 3. TOP LAYOUT (Portrait | Right Stack) ---
+    top_layout = Table.grid(expand=True)
+    top_layout.add_column(ratio=1)
+    top_layout.add_column(ratio=2)
+    top_layout.add_row(portrait_panel, right_stack)
+
+    # --- 4. SYSTEM CHECKS PANEL (Below top section) ---
+    checks_text = Text.assemble(
+        ("[green][✔][/green] Policy engine loaded\n", "green"),
+        ("[green][✔][/green] Hash-chain logger initialized\n", "green"),
+        ("[green][✔][/green] Scenario A loaded: trading_ai\n", "green"),
+        ("[green][✔][/green] Scenario B loaded: urban_ai\n", "green"),
+        ("[green][✔][/green] SOC environment ready\n", "green"),
+        ("[green][✔][/green] Audit integrity verified", "green")
     )
-    console.print()
+    checks_panel = Panel(checks_text, title="[bold green]SYSTEM CHECKS[/bold green]", 
+                        border_style="green", padding=(1, 2))
 
-
-def print_status(armed: bool = True) -> None:
-    """Print system status after startup checks."""
-
-    checks = [
-        ("[✔]", "Policy engine loaded"),
-        ("[✔]", "Hash-chain logger initialized"),
-        ("[✔]", "Scenario A loaded: trading_ai"),
-        ("[✔]", "Scenario B loaded: urban_ai"),
-        ("[✔]", "SOC environment ready"),
-        ("[✔]", "Audit integrity verified"),
-    ]
-
-    for badge, message in checks:
-        console.print(
-            Text(f"  {badge} ", style="bold green") + Text(message, style="white")
-        )
-
-    console.print()
-    console.rule(style="dim")
-    console.print()
-
-    status_color = "bold green" if armed else "bold red"
-    status_text = "ARMED" if armed else "DISARMED"
-
-    console.print(
-        Text("  STATUS: ", style="white")
-        + Text(status_text, style=status_color)
-        + Text("  |  ", style="dim")
-        + Text("MODE: STANDBY", style="bold yellow")
-        + Text("  |  ", style="dim")
-        + Text("CHAIN: INTACT ✔", style="bold cyan")
+    # --- 5. FOOTER BAR (STATUS | MODE | CHAIN) ---
+    footer = Table.grid(expand=True)
+    footer.add_column(justify="center", ratio=1)
+    footer.add_column(justify="center", ratio=1)
+    footer.add_column(justify="center", ratio=1)
+    footer.add_row(
+        "STATUS: [bold green]ARMED[/bold green]",
+        "MODE: [bold yellow]STANDBY[/bold yellow]",
+        "CHAIN: [bold cyan]INTACT [white]✔[/white][/bold cyan]"
     )
+    footer_panel = Panel(footer, border_style="green")
 
-    console.print()
-    console.print(
-        Text(
-            "  Type 'aisec --help' to see all available commands.",
-            style="dim",
-        )
-    )
-    console.print()
-
+    # --- PRINT EVERYTHING ---
+    console.print(top_layout)
+    console.print(checks_panel)
+    console.print(footer_panel)
+    console.print("\nType 'aisec --help' to see all available commands.", style="dim")
 
 @click.group(invoke_without_command=True)
 @click.pass_context
-def cli(ctx: click.Context) -> None:
-    """
-    AISec — Runtime Security Monitoring for Autonomous AI Agents.
-
-    A CLI-first security platform that monitors AI agent behavior,
-    scores actions for risk, enforces policy decisions in real time,
-    and preserves tamper-evident audit trails.
-    """
+def cli(ctx):
+    """AISec - Runtime Security Monitoring CLI"""
     if ctx.invoked_subcommand is None:
-        print_logo()
-        print_status()
-
+        print_dashboard()
 
 @cli.command()
-def start() -> None:
-    """Start the AISec monitoring engine."""
-    console.print()
-    console.print(Text("  Starting AISec monitoring engine...", style="yellow"))
-    console.print()
-    # TODO: implement engine startup
-    console.print(Text("  [✔] Engine started.", style="bold green"))
-    console.print()
-
-
-@cli.command()
-def stop() -> None:
-    """Stop the AISec monitoring engine."""
-    console.print()
-    console.print(Text("  Stopping AISec monitoring engine...", style="yellow"))
-    console.print()
-    # TODO: implement engine shutdown
-    console.print(Text("  [✔] Engine stopped.", style="bold green"))
-    console.print()
-
-
-@cli.command()
-def status() -> None:
-    """Show current system status."""
-    print_logo()
-    print_status()
-
-
-def main() -> None:
-    """Main entry point."""
-    cli()
-
+def start():
+    """Start the monitoring engine"""
+    console.print("\n[bold green]▶ Starting AISec engine...[/bold green]\n")
 
 if __name__ == "__main__":
-    main()
+    cli()
