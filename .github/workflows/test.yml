@@ -1,0 +1,18 @@
+name: AISec CI                          # Name of the workflow
+on:                                     # When to run it
+  push:                                 # On push to main/master
+  pull_request:                         # On pull requests
+
+jobs:
+  test:
+    runs-on: ubuntu-latest              # Run on Linux
+    steps:
+      - uses: actions/checkout@v4       # Download your code
+      - name: Set up Python 3.11        # Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies      # Install your packages
+        run: pip install -r requirements.txt
+      - name: Run tests                 # Run your test suite
+        run: python -m pytest tests/    # Or your test command
