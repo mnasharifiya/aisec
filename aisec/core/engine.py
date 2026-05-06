@@ -28,7 +28,7 @@ Paper reference:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from aisec.core.decision import DecisionContext, DecisionEngine
@@ -47,20 +47,30 @@ class EngineResult:
     Complete output of the analysis engine for one Event.
 
     Attributes:
-        event:          The original event that was analysed.
-        analysis:       Full AnalysisResult from the decision engine.
-        log_entry_id:   ID of the audit log entry written for this result.
-        blocked:        True if the action was blocked or escalated.
-        requires_review: True if a human analyst must review this action.
+        event:           The original event that was analysed.
+        analysis:         Full AnalysisResult from the decision engine.
+        log_entry_id:     ID of the audit log entry written for this result.
+        blocked:          True if the action was blocked or escalated.
+        requires_review:  True if a human analyst must review this action.
     """
-    event:            Event
-    analysis:         AnalysisResult
-    log_entry_id:     str
+    event: Event
+    analysis: AnalysisResult
+    log_entry_id: str
 
     @property
     def blocked(self) -> bool:
-        """True if the action must not proceed."""
-        return self.analysis.decision in (Decision.BLOCK, Decision.ESCALATE)
+        """
+        True if the action must not proceed without human intervention.
+
+        BLOCK and ESCALATE are hard stops.
+        PENDING_REVIEW is a soft stop — action is held until a human approves.
+        All three prevent autonomous execution.
+        """
+        return self.analysis.decision in (
+            Decision.BLOCK,
+            Decision.ESCALATE,
+            Decision.PENDING_REVIEW,
+        )
 
     @property
     def requires_review(self) -> bool:
@@ -113,18 +123,18 @@ class AnalysisEngine:
         as parameters to allow injection during testing.
 
         Args:
-            log_path:        Where to write the audit log.
-            vector_builder:  Converts Events to FeatureVectors.
-            scorer:          Computes R(x) = sigmoid(w^T x + b).
-            rule_engine:     Applies hard policy rules.
-            decision_engine: Combines score + rules into a decision.
-            audit_logger:    Writes tamper-evident log entries.
+            log_path:         Where to write the audit log.
+            vector_builder:   Converts Events to FeatureVectors.
+            scorer:           Computes R(x) = sigmoid(w^T x + b).
+            rule_engine:      Applies hard policy rules.
+            decision_engine:  Combines score + rules into a decision.
+            audit_logger:     Writes tamper-evident log entries.
         """
-        self._builder  = vector_builder  or FeatureVectorBuilder()
-        self._scorer   = scorer          or RiskScorer()
-        self._rules    = rule_engine     or RuleEngine()
+        self._builder = vector_builder or FeatureVectorBuilder()
+        self._scorer = scorer or RiskScorer()
+        self._rules = rule_engine or RuleEngine()
         self._decision = decision_engine or DecisionEngine()
-        self._logger   = audit_logger    or AuditLogger(log_path)
+        self._logger = audit_logger or AuditLogger(log_path)
 
     def analyse(self, event: Event) -> EngineResult:
         """
@@ -153,7 +163,7 @@ class AnalysisEngine:
         rules = self._rules.evaluate(event)
 
         # Step 4 — decision
-        ctx      = DecisionContext(event=event, rule_result=rules, score_result=score)
+        ctx = DecisionContext(event=event, rule_result=rules, score_result=score)
         analysis = self._decision.decide(ctx)
 
         # Step 5 — audit log
@@ -161,13 +171,13 @@ class AnalysisEngine:
             record_type="analysis",
             record_id=event.event_id,
             payload={
-                "agent_id":    event.agent_id,
+                "agent_id": event.agent_id,
                 "action_type": event.action_type,
-                "target":      event.target,
-                "scenario":    event.scenario.value,
-                "risk_score":  analysis.risk_score,
-                "decision":    analysis.decision.value,
-                "rule_hits":   analysis.rule_hits,
+                "target": event.target,
+                "scenario": event.scenario.value,
+                "risk_score": analysis.risk_score,
+                "decision": analysis.decision.value,
+                "rule_hits": analysis.rule_hits,
                 "explanation": analysis.explanation,
             },
         )
