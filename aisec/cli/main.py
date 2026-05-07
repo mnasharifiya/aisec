@@ -14,17 +14,37 @@ from aisec.utils.assets import LOGO, PORTRAIT
 
 console = Console()
 
-# Safe ASCII Shields
-SHIELD_LOCK_ASCII = """      __      
-     /  \\     
-    | [::] |    
-     \\__/     
+# Professional ASCII Shields
+SHIELD_LOCK_ASCII = r"""
+           .--------.
+          / .------. \
+         / /        \ \
+         | |  LOCK  | |
+        _| |________| |_
+      .' |_|        |_| '.
+      '._____ ____ _____.'
+      |     .'____'.     |
+      '.__.'.'    '.'.__.'
+      '.__  | SEC |  __.'
+      |   '.'.____.'.'   |
+      '.____'.____.'____.'
+      '.________________.'
 """
 
-SHIELD_CHECK_ASCII = """      __      
-     /  \\     
-    | [V] |    
-     \\__/     
+SHIELD_CHECK_ASCII = r"""
+           .--------.
+          / .------. \
+         / /        \ \
+         | | SECURE | |
+        _| |________| |_
+      .' |_|  ✓✓✓   |_| '.
+      '._____ ____ _____.'
+      |     .'____'.     |
+      '.__.'.'    '.'.__.'
+      '.__  | OK  |  __.'
+      |   '.'.____.'.'   |
+      '.____'.____.'____.'
+      '.________________.'
 """
 
 
@@ -68,7 +88,7 @@ def print_dashboard():
     )
 
     secure_panel = Panel(
-        SHIELD_CHECK_ASCII + "\nALL SYSTEMS OPERATIONAL",
+        SHIELD_CHECK_ASCII.strip() + "\n\nALL SYSTEMS OPERATIONAL",
         title="[bold green]SYSTEM SECURE[/bold green]",
         border_style="green",
         padding=(1, 2),

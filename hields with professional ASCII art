@@ -1,0 +1,60 @@
+[1mdiff --git a/aisec/cli/main.py b/aisec/cli/main.py[m
+[1mindex 4d6d7e8..1b984f6 100644[m
+[1m--- a/aisec/cli/main.py[m
+[1m+++ b/aisec/cli/main.py[m
+[36m@@ -14,17 +14,37 @@[m [mfrom aisec.utils.assets import LOGO, PORTRAIT[m
+ [m
+ console = Console()[m
+ [m
+[31m-# Safe ASCII Shields[m
+[31m-SHIELD_LOCK_ASCII = """      __      [m
+[31m-     /  \\     [m
+[31m-    | [::] |    [m
+[31m-     \\__/     [m
+[32m+[m[32m# Professional ASCII Shields[m
+[32m+[m[32mSHIELD_LOCK_ASCII = r"""[m
+[32m+[m[32m           .--------.[m
+[32m+[m[32m          / .------. \[m
+[32m+[m[32m         / /        \ \[m
+[32m+[m[32m         | |  LOCK  | |[m
+[32m+[m[32m        _| |________| |_[m
+[32m+[m[32m      .' |_|        |_| '.[m
+[32m+[m[32m      '._____ ____ _____.'[m
+[32m+[m[32m      |     .'____'.     |[m
+[32m+[m[32m      '.__.'.'    '.'.__.'[m
+[32m+[m[32m      '.__  | SEC |  __.'[m
+[32m+[m[32m      |   '.'.____.'.'   |[m
+[32m+[m[32m      '.____'.____.'____.'[m
+[32m+[m[32m      '.________________.'[m
+ """[m
+ [m
+[31m-SHIELD_CHECK_ASCII = """      __      [m
+[31m-     /  \\     [m
+[31m-    | [V] |    [m
+[31m-     \\__/     [m
+[32m+[m[32mSHIELD_CHECK_ASCII = r"""[m
+[32m+[m[32m           .--------.[m
+[32m+[m[32m          / .------. \[m
+[32m+[m[32m         / /        \ \[m
+[32m+[m[32m         | | SECURE | |[m
+[32m+[m[32m        _| |________| |_[m
+[32m+[m[32m      .' |_|  ✓✓✓   |_| '.[m
+[32m+[m[32m      '._____ ____ _____.'[m
+[32m+[m[32m      |     .'____'.     |[m
+[32m+[m[32m      '.__.'.'    '.'.__.'[m
+[32m+[m[32m      '.__  | OK  |  __.'[m
+[32m+[m[32m      |   '.'.____.'.'   |[m
+[32m+[m[32m      '.____'.____.'____.'[m
+[32m+[m[32m      '.________________.'[m
+ """[m
+ [m
+ [m
+[36m@@ -68,7 +88,7 @@[m [mdef print_dashboard():[m
+     )[m
+ [m
+     secure_panel = Panel([m
+[31m-        SHIELD_CHECK_ASCII + "\nALL SYSTEMS OPERATIONAL",[m
+[32m+[m[32m        SHIELD_CHECK_ASCII.strip() + "\n\nALL SYSTEMS OPERATIONAL",[m
+         title="[bold green]SYSTEM SECURE[/bold green]",[m
+         border_style="green",[m
+         padding=(1, 2),[m
