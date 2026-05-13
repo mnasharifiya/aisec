@@ -12,6 +12,7 @@ from aisec.cli.monitor import monitor_command
 from aisec.cli.soc import soc_command
 from aisec.utils.assets import LOGO, PORTRAIT
 from aisec.cli.stats import stats_command
+from aisec.cli.logs import logs_command
 
 console = Console()
 
@@ -186,7 +187,7 @@ def start():
 cli.add_command(monitor_command)
 cli.add_command(soc_command)
 cli.add_command(stats_command)
-
+cli.add_command(logs_command)
 def main() -> None:
     cli()
 

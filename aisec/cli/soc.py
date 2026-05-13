@@ -496,7 +496,7 @@ def soc_command(analyst: str, scenario: str, steps: int) -> None:
     with flagged events, then opens an interactive console
     where analysts can approve, block, or escalate them.
 
-    \b
+    \\b
     Examples:
         aisec soc
         aisec soc --analyst senior_analyst --scenario trading_ai
