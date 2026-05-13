@@ -11,6 +11,7 @@ from rich.text import Text
 from aisec.cli.monitor import monitor_command
 from aisec.cli.soc import soc_command
 from aisec.utils.assets import LOGO, PORTRAIT
+from aisec.cli.stats import stats_command
 
 console = Console()
 
@@ -184,7 +185,7 @@ def start():
 # Register CLI commands
 cli.add_command(monitor_command)
 cli.add_command(soc_command)
-
+cli.add_command(stats_command)
 
 def main() -> None:
     cli()
