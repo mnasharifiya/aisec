@@ -11,13 +11,13 @@
 Built on the research framework published in:
 **"A Layered Cybersecurity Framework for Enforcing 
 Human Control Over Autonomous AI Systems "**
-— Muhammad Muttaka, Astana IT University, 2025.
+Muhammad Muttaka, Astana IT University, 2025.
 
 ---
 
 ## What Is AISec?
 
-Autonomous AI agents — trading bots, smart city controllers, autonomous
+Autonomous AI agents: trading bots, smart city controllers, autonomous
 drones — can cause serious harm when they act without human oversight.
 AISec is a security layer that sits between an AI agent and the systems
 it controls, intercepting every action, scoring it for risk, and blocking
