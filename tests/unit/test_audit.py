@@ -12,8 +12,8 @@ import pytest
 
 from aisec.storage.audit import AuditLogger, GENESIS_HASH
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def logger(tmp_path: Path) -> AuditLogger:
@@ -22,6 +22,7 @@ def logger(tmp_path: Path) -> AuditLogger:
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
 
 class TestAuditLogger:
 
@@ -37,7 +38,7 @@ class TestAuditLogger:
         assert entry.prev_hash == GENESIS_HASH
 
     def test_second_entry_links_to_first(self, logger: AuditLogger) -> None:
-        first  = logger.log("event", "evt-001", {"action": "buy"})
+        first = logger.log("event", "evt-001", {"action": "buy"})
         second = logger.log("event", "evt-002", {"action": "sell"})
         assert second.prev_hash == first.current_hash
 
@@ -64,7 +65,7 @@ class TestAuditLogger:
         self, logger: AuditLogger, tmp_path: Path
     ) -> None:
         log_path = tmp_path / "test_audit.jsonl"
-        logger2  = AuditLogger(log_path=log_path)
+        logger2 = AuditLogger(log_path=log_path)
 
         logger2.log("event", "evt-001", {"action": "buy"})
         logger2.log("event", "evt-002", {"action": "sell"})
@@ -82,9 +83,7 @@ class TestAuditLogger:
         assert ok is False
         assert len(errors) > 0
 
-    def test_log_persists_across_instances(
-        self, tmp_path: Path
-    ) -> None:
+    def test_log_persists_across_instances(self, tmp_path: Path) -> None:
         log_path = tmp_path / "persist.jsonl"
 
         # First instance writes

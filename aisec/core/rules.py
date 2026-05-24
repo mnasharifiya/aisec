@@ -19,8 +19,8 @@ from typing import Callable
 
 from aisec.storage.models import Decision, Event, Scenario
 
-
 # ── Rule result ───────────────────────────────────────────────────────────────
+
 
 @dataclass
 class RuleResult:
@@ -33,10 +33,11 @@ class RuleResult:
         decision:   Enforcement decision if fired, else None.
         reason:     Human-readable explanation for analysts.
     """
-    fired:    bool
-    rule_id:  str
+
+    fired: bool
+    rule_id: str
     decision: Decision | None = None
-    reason:   str             = ""
+    reason: str = ""
 
 
 # ── Type alias ────────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ RuleFunction = Callable[[Event], RuleResult]
 
 
 # ── Shared rule helpers ───────────────────────────────────────────────────────
+
 
 def _no_match(rule_id: str) -> RuleResult:
     """Return a standard non-firing result."""
@@ -82,6 +84,7 @@ def _review(rule_id: str, reason: str) -> RuleResult:
 
 
 # ── Trading AI rules (Scenario A) ─────────────────────────────────────────────
+
 
 def rule_trading_large_trade(event: Event) -> RuleResult:
     """
@@ -177,6 +180,7 @@ def rule_trading_after_hours(event: Event) -> RuleResult:
 
 # ── Urban AI rules (Scenario B) ───────────────────────────────────────────────
 
+
 def rule_urban_curfew(event: Event) -> RuleResult:
     """
     Block any attempt to impose city-wide movement restrictions.
@@ -188,7 +192,7 @@ def rule_urban_curfew(event: Event) -> RuleResult:
     rule_id = "URBAN-001"
 
     if event.action_type in ("set_curfew", "restrict_movement", "lockdown_zone"):
-        zone  = event.raw_payload.get("zone", "unknown")
+        zone = event.raw_payload.get("zone", "unknown")
         hours = event.raw_payload.get("duration_hours", 0)
         return _block(
             rule_id,
@@ -290,11 +294,12 @@ URBAN_AI_RULES: list[RuleFunction] = [
 
 SCENARIO_RULES: dict[Scenario, list[RuleFunction]] = {
     Scenario.TRADING_AI: TRADING_AI_RULES,
-    Scenario.URBAN_AI:   URBAN_AI_RULES,
+    Scenario.URBAN_AI: URBAN_AI_RULES,
 }
 
 
 # ── Rule engine ───────────────────────────────────────────────────────────────
+
 
 @dataclass
 class RuleEngineResult:
@@ -307,9 +312,10 @@ class RuleEngineResult:
                          BLOCK > ESCALATE > PENDING_REVIEW > None.
         rule_ids:        IDs of all fired rules for audit logging.
     """
-    hits:           list[RuleResult]  = field(default_factory=list)
-    final_decision: Decision | None   = None
-    rule_ids:       list[str]         = field(default_factory=list)
+
+    hits: list[RuleResult] = field(default_factory=list)
+    final_decision: Decision | None = None
+    rule_ids: list[str] = field(default_factory=list)
 
     @property
     def any_fired(self) -> bool:
@@ -319,10 +325,10 @@ class RuleEngineResult:
 
 # Decision priority — higher index = higher priority
 _DECISION_PRIORITY: dict[Decision, int] = {
-    Decision.ALLOW:          0,
+    Decision.ALLOW: 0,
     Decision.PENDING_REVIEW: 1,
-    Decision.ESCALATE:       2,
-    Decision.BLOCK:          3,
+    Decision.ESCALATE: 2,
+    Decision.BLOCK: 3,
 }
 
 

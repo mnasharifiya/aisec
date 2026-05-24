@@ -28,8 +28,8 @@ from typing import Any
 from aisec.core.engine import AnalysisEngine, EngineResult
 from aisec.storage.models import Decision, Event, Scenario
 
-
 # ── Action definitions ────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class TradeAction:
@@ -43,10 +43,11 @@ class TradeAction:
         label:       Human-readable description for display.
         is_dangerous: True if this action should be blocked by AISec.
     """
-    action_type:  str
-    target:       str
-    payload:      dict[str, Any]
-    label:        str
+
+    action_type: str
+    target: str
+    payload: dict[str, Any]
+    label: str
     is_dangerous: bool = False
 
 
@@ -113,6 +114,7 @@ DANGEROUS_ACTIONS: list[TradeAction] = [
 
 # ── Trading agent ─────────────────────────────────────────────────────────────
 
+
 class TradingAgent:
     """
     Simulated autonomous trading AI agent.
@@ -132,7 +134,7 @@ class TradingAgent:
     """
 
     # Immutable identity — set once, never changed
-    AGENT_ID: str     = "trading_bot_v1"
+    AGENT_ID: str = "trading_bot_v1"
     SCENARIO: Scenario = Scenario.TRADING_AI
 
     def __init__(self, engine: AnalysisEngine) -> None:
@@ -146,7 +148,7 @@ class TradingAgent:
                 f"engine must be an AnalysisEngine, got {type(engine).__name__}"
             )
         self._engine = engine
-        self._step   = 0
+        self._step = 0
 
     def run(self, steps: int = 20) -> list[EngineResult]:
         """
@@ -234,15 +236,13 @@ class TradingAgent:
         """
         return Event(
             action_type=action.action_type,
-            agent_id=self.AGENT_ID,       # immutable — from class constant
+            agent_id=self.AGENT_ID,  # immutable — from class constant
             target=action.target,
-            scenario=self.SCENARIO,        # immutable — from class constant
-            raw_payload=dict(action.payload),   # copy — prevent mutation
+            scenario=self.SCENARIO,  # immutable — from class constant
+            raw_payload=dict(action.payload),  # copy — prevent mutation
         )
 
-    def _synthetic_block(
-        self, action: TradeAction, exc: Exception
-    ) -> EngineResult:
+    def _synthetic_block(self, action: TradeAction, exc: Exception) -> EngineResult:
         """
         Build a synthetic BLOCK result when the engine itself fails.
 

@@ -16,14 +16,14 @@ from typing import Any
 
 from aisec.storage.models import AuditLogEntry
 
-
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-GENESIS_HASH = "0" * 64   # Sentinel value for the very first entry
+GENESIS_HASH = "0" * 64  # Sentinel value for the very first entry
 DEFAULT_LOG_PATH = Path(".aisec") / "audit.jsonl"
 
 
 # ── AuditLogger ───────────────────────────────────────────────────────────────
+
 
 class AuditLogger:
     """
@@ -54,12 +54,14 @@ class AuditLogger:
         """
         import os
         import sys
+
         if sys.platform != "win32":
             try:
                 mode = oct(os.stat(self._path.parent).st_mode)[-3:]
                 # mode is a string like '700' or '755'; check 'others' permission bit
                 if mode[2] != "0":
                     import warnings
+
                     warnings.warn(
                         f"Audit log directory {self._path.parent} may be "
                         f"readable by other users (permissions: {mode}). "
@@ -146,13 +148,13 @@ class AuditLogger:
     def _append(self, entry: AuditLogEntry) -> None:
         """Serialize the entry to JSON and append it to the log file."""
         record = {
-            "log_id":       entry.log_id,
-            "timestamp":    entry.timestamp,
-            "record_type":  entry.record_type,
-            "record_id":    entry.record_id,
-            "prev_hash":    entry.prev_hash,
+            "log_id": entry.log_id,
+            "timestamp": entry.timestamp,
+            "record_type": entry.record_type,
+            "record_id": entry.record_id,
+            "prev_hash": entry.prev_hash,
             "current_hash": entry.current_hash,
-            "payload":      entry.payload,
+            "payload": entry.payload,
         }
         with self._path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record) + "\n")

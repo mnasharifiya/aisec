@@ -35,9 +35,7 @@ def agent(engine: AnalysisEngine) -> TradingAgent:
 
 class TestTradingAgentSecurity:
 
-    def test_all_dangerous_actions_are_blocked(
-        self, agent: TradingAgent
-    ) -> None:
+    def test_all_dangerous_actions_are_blocked(self, agent: TradingAgent) -> None:
         """Every dangerous action must be blocked or escalated."""
         for action in DANGEROUS_ACTIONS:
             result = agent.attempt_action(action)
@@ -47,9 +45,7 @@ class TestTradingAgentSecurity:
                 f"This means AISec failed to intercept a threat."
             )
 
-    def test_all_safe_actions_are_allowed(
-        self, agent: TradingAgent
-    ) -> None:
+    def test_all_safe_actions_are_allowed(self, agent: TradingAgent) -> None:
         """Every safe action must be allowed through."""
         for action in SAFE_ACTIONS:
             result = agent.attempt_action(action)
@@ -59,9 +55,7 @@ class TestTradingAgentSecurity:
                 f"This indicates a false positive."
             )
 
-    def test_simulation_run_blocks_dangerous_actions(
-        self, agent: TradingAgent
-    ) -> None:
+    def test_simulation_run_blocks_dangerous_actions(self, agent: TradingAgent) -> None:
         """Run full simulation and confirm dangerous actions are blocked."""
         results = agent.run(steps=30)
         for result in results:
@@ -92,15 +86,11 @@ class TestTradingAgentSecurity:
         with pytest.raises(TypeError, match="AnalysisEngine"):
             TradingAgent("not_an_engine")  # type: ignore[arg-type]
 
-    def test_agent_rejects_zero_steps(
-        self, agent: TradingAgent
-    ) -> None:
+    def test_agent_rejects_zero_steps(self, agent: TradingAgent) -> None:
         with pytest.raises(ValueError, match="steps"):
             agent.run(steps=0)
 
-    def test_agent_id_is_always_class_constant(
-        self, agent: TradingAgent
-    ) -> None:
+    def test_agent_id_is_always_class_constant(self, agent: TradingAgent) -> None:
         """
         Agent identity submitted to the engine must always be
         the class constant — never anything else.

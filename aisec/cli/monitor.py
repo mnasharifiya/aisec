@@ -49,19 +49,20 @@ console = Console()
 # ── Display constants ─────────────────────────────────────────────────────────
 
 DECISION_STYLE: dict[Decision, tuple[str, str]] = {
-    Decision.ALLOW:          ("ALLOW",   "bold green"),
-    Decision.BLOCK:          ("BLOCK",   "bold red"),
-    Decision.ESCALATE:       ("ESCALATE","bold magenta"),
-    Decision.PENDING_REVIEW: ("REVIEW",  "bold yellow"),
+    Decision.ALLOW: ("ALLOW", "bold green"),
+    Decision.BLOCK: ("BLOCK", "bold red"),
+    Decision.ESCALATE: ("ESCALATE", "bold magenta"),
+    Decision.PENDING_REVIEW: ("REVIEW", "bold yellow"),
 }
 
-MAX_ACTION_LEN:      int = 28
-MAX_TARGET_LEN:      int = 22
+MAX_ACTION_LEN: int = 28
+MAX_TARGET_LEN: int = 22
 MAX_EXPLANATION_LEN: int = 55
-PAUSE_BETWEEN_STEPS: float = 0.35   # seconds — realistic streaming feel
+PAUSE_BETWEEN_STEPS: float = 0.35  # seconds — realistic streaming feel
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _truncate(s: str, max_len: int) -> str:
     """Truncate a string to max_len characters with ellipsis."""
@@ -89,8 +90,8 @@ def _risk_bar(score: float) -> str:
     Example: 0.75 → '███████░░░ 0.75'
     """
     filled = int(score * 10)
-    empty  = 10 - filled
-    bar    = "█" * filled + "░" * empty
+    empty = 10 - filled
+    bar = "█" * filled + "░" * empty
     return f"{bar} {score:.2f}"
 
 
@@ -106,6 +107,7 @@ def _risk_style(score: float) -> str:
 
 
 # ── Table builder ─────────────────────────────────────────────────────────────
+
 
 def _build_table(results: list[EngineResult], scenario_label: str) -> Table:
     """
@@ -123,21 +125,21 @@ def _build_table(results: list[EngineResult], scenario_label: str) -> Table:
         show_lines=True,
     )
 
-    table.add_column("Time",       style="dim",         width=10, no_wrap=True)
-    table.add_column("Decision",   width=10,             no_wrap=True)
-    table.add_column("Agent",      style="cyan",         width=16, no_wrap=True)
-    table.add_column("Action",     style="white",        width=30, no_wrap=True)
-    table.add_column("Target",     style="dim white",    width=24, no_wrap=True)
-    table.add_column("Risk",       width=18,             no_wrap=True)
-    table.add_column("Explanation",style="dim",          min_width=30)
+    table.add_column("Time", style="dim", width=10, no_wrap=True)
+    table.add_column("Decision", width=10, no_wrap=True)
+    table.add_column("Agent", style="cyan", width=16, no_wrap=True)
+    table.add_column("Action", style="white", width=30, no_wrap=True)
+    table.add_column("Target", style="dim white", width=24, no_wrap=True)
+    table.add_column("Risk", width=18, no_wrap=True)
+    table.add_column("Explanation", style="dim", min_width=30)
 
     for result in results:
-        ts         = result.event.timestamp[11:19]   # HH:MM:SS
-        decision   = _decision_badge(result.analysis.decision)
-        agent      = _truncate(result.event.agent_id, 16)
-        action     = _truncate(result.event.action_type, MAX_ACTION_LEN)
-        target     = _truncate(result.event.target, MAX_TARGET_LEN)
-        risk       = _risk_bar(result.analysis.risk_score)
+        ts = result.event.timestamp[11:19]  # HH:MM:SS
+        decision = _decision_badge(result.analysis.decision)
+        agent = _truncate(result.event.agent_id, 16)
+        action = _truncate(result.event.action_type, MAX_ACTION_LEN)
+        target = _truncate(result.event.target, MAX_TARGET_LEN)
+        risk = _risk_bar(result.analysis.risk_score)
         risk_style = _risk_style(result.analysis.risk_score)
         explanation = _truncate(result.analysis.explanation, MAX_EXPLANATION_LEN)
 
@@ -156,16 +158,13 @@ def _build_table(results: list[EngineResult], scenario_label: str) -> Table:
 
 def _build_summary_panel(results: list[EngineResult]) -> Panel:
     """Build a summary statistics panel shown below the event table."""
-    total    = len(results)
-    blocked  = sum(1 for r in results if r.analysis.decision == Decision.BLOCK)
+    total = len(results)
+    blocked = sum(1 for r in results if r.analysis.decision == Decision.BLOCK)
     escalate = sum(1 for r in results if r.analysis.decision == Decision.ESCALATE)
-    review   = sum(1 for r in results if r.analysis.decision == Decision.PENDING_REVIEW)
-    allowed  = sum(1 for r in results if r.analysis.decision == Decision.ALLOW)
+    review = sum(1 for r in results if r.analysis.decision == Decision.PENDING_REVIEW)
+    allowed = sum(1 for r in results if r.analysis.decision == Decision.ALLOW)
 
-    avg_risk = (
-        sum(r.analysis.risk_score for r in results) / total
-        if total > 0 else 0.0
-    )
+    avg_risk = sum(r.analysis.risk_score for r in results) / total if total > 0 else 0.0
 
     summary = (
         f"[bold white]Events:[/] {total}   "
@@ -180,6 +179,7 @@ def _build_summary_panel(results: list[EngineResult]) -> Panel:
 
 
 # ── Click command ─────────────────────────────────────────────────────────────
+
 
 @click.command("monitor")
 @click.option(
@@ -217,12 +217,12 @@ def monitor_command(scenario: str, steps: int, speed: float) -> None:
         aisec monitor --scenario both --speed 0.5
     """
     log_path = Path(".aisec") / "monitor_session.jsonl"
-    engine   = AnalysisEngine(log_path=log_path)
+    engine = AnalysisEngine(log_path=log_path)
 
     scenario_label = {
         "trading_ai": "Scenario A — Autonomous Trading AI",
-        "urban_ai":   "Scenario B — Smart City Urban AI",
-        "both":       "Scenario A + B — Trading AI & Urban AI",
+        "urban_ai": "Scenario B — Smart City Urban AI",
+        "both": "Scenario A + B — Trading AI & Urban AI",
     }[scenario]
 
     console.print()
@@ -230,8 +230,10 @@ def monitor_command(scenario: str, steps: int, speed: float) -> None:
         Text(f"  Starting live monitor — {scenario_label}", style="bold cyan")
     )
     console.print(
-        Text(f"  Simulating {steps} actions | speed={speed}s | Ctrl+C to stop",
-             style="dim")
+        Text(
+            f"  Simulating {steps} actions | speed={speed}s | Ctrl+C to stop",
+            style="dim",
+        )
     )
     console.print()
 
@@ -257,9 +259,7 @@ def monitor_command(scenario: str, steps: int, speed: float) -> None:
 
             for agent_name, action in action_sequence:
                 # Find the right agent
-                agent_obj = next(
-                    (a for name, a in agents if name == agent_name), None
-                )
+                agent_obj = next((a for name, a in agents if name == agent_name), None)
                 if agent_obj is None:
                     continue
 
@@ -269,6 +269,7 @@ def monitor_command(scenario: str, steps: int, speed: float) -> None:
 
                 # Update the live display
                 from rich.console import Group
+
                 live.update(
                     Group(
                         _build_table(results, scenario_label),
@@ -288,21 +289,19 @@ def monitor_command(scenario: str, steps: int, speed: float) -> None:
     _print_final_summary(results, engine)
 
 
-def _build_action_sequence(
-    scenario: str, steps: int
-) -> list[tuple[str, object]]:
+def _build_action_sequence(scenario: str, steps: int) -> list[tuple[str, object]]:
     """
     Build a mixed action sequence for the given scenario.
 
     Returns a list of (agent_name, action) tuples.
     For 'both', actions alternate between trading and urban.
     """
-    import random   # Non-cryptographic — simulation only, not security-sensitive
+    import random  # Non-cryptographic — simulation only, not security-sensitive
 
     sequence = []
 
     trading_pool = TRADING_SAFE * 2 + TRADING_DANGEROUS
-    urban_pool   = URBAN_SAFE * 3 + URBAN_DANGEROUS
+    urban_pool = URBAN_SAFE * 3 + URBAN_DANGEROUS
 
     for i in range(steps):
         if scenario == "trading_ai":
@@ -319,15 +318,13 @@ def _build_action_sequence(
     return sequence
 
 
-def _print_final_summary(
-    results: list[EngineResult], engine: AnalysisEngine
-) -> None:
+def _print_final_summary(results: list[EngineResult], engine: AnalysisEngine) -> None:
     """Print a final security summary after the simulation ends."""
-    total    = len(results)
-    blocked  = sum(1 for r in results if r.analysis.decision == Decision.BLOCK)
+    total = len(results)
+    blocked = sum(1 for r in results if r.analysis.decision == Decision.BLOCK)
     escalate = sum(1 for r in results if r.analysis.decision == Decision.ESCALATE)
-    review   = sum(1 for r in results if r.analysis.decision == Decision.PENDING_REVIEW)
-    allowed  = sum(1 for r in results if r.analysis.decision == Decision.ALLOW)
+    review = sum(1 for r in results if r.analysis.decision == Decision.PENDING_REVIEW)
+    allowed = sum(1 for r in results if r.analysis.decision == Decision.ALLOW)
 
     ok, errors = engine.verify_audit_chain()
     chain_status = (
@@ -336,16 +333,18 @@ def _print_final_summary(
         else Text(f"✘ BROKEN ({len(errors)} errors)", style="bold red")
     )
 
-    console.print(Panel(
-        f"[bold white]Total events:[/]    {total}\n"
-        f"[bold red]Blocked:[/]          {blocked}\n"
-        f"[bold magenta]Escalated:[/]       {escalate}\n"
-        f"[bold yellow]Under review:[/]    {review}\n"
-        f"[bold green]Allowed:[/]          {allowed}\n"
-        f"[cyan]Audit chain:[/]      ",
-        title="[bold cyan]AISec Session Complete[/bold cyan]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold white]Total events:[/]    {total}\n"
+            f"[bold red]Blocked:[/]          {blocked}\n"
+            f"[bold magenta]Escalated:[/]       {escalate}\n"
+            f"[bold yellow]Under review:[/]    {review}\n"
+            f"[bold green]Allowed:[/]          {allowed}\n"
+            f"[cyan]Audit chain:[/]      ",
+            title="[bold cyan]AISec Session Complete[/bold cyan]",
+            border_style="cyan",
+        )
+    )
     console.print(f"  Audit chain integrity: ", end="")
     console.print(chain_status)
     console.print()

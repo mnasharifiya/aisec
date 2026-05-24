@@ -32,18 +32,18 @@ from aisec.core.rules import RuleEngineResult
 from aisec.core.scorer import ScoreResult
 from aisec.storage.models import AnalysisResult, Decision, Event
 
-
 # ── Thresholds ────────────────────────────────────────────────────────────────
 #
 # These match Section 9.1 of the architecture document exactly.
 # Change only with documented justification and a test update.
 
-THRESHOLD_BLOCK:  float = 0.80   # risk >= 0.80 → immediate block
-THRESHOLD_REVIEW: float = 0.60   # risk >= 0.60 → human review required
-THRESHOLD_WATCH:  float = 0.30   # risk >= 0.30 → log and watch
+THRESHOLD_BLOCK: float = 0.80  # risk >= 0.80 → immediate block
+THRESHOLD_REVIEW: float = 0.60  # risk >= 0.60 → human review required
+THRESHOLD_WATCH: float = 0.30  # risk >= 0.30 → log and watch
 
 
 # ── Decision engine ───────────────────────────────────────────────────────────
+
 
 @dataclass
 class DecisionContext:
@@ -55,8 +55,9 @@ class DecisionContext:
         rule_result:  Output from the rule engine.
         score_result: Output from the risk scorer.
     """
-    event:        Event
-    rule_result:  RuleEngineResult
+
+    event: Event
+    rule_result: RuleEngineResult
     score_result: ScoreResult
 
 
@@ -92,15 +93,13 @@ class DecisionEngine:
             decision=decision,
             explanation=explanation,
             rule_hits=ctx.rule_result.rule_ids,
-            baseline_similarity=1.0,   # temporal module wires this in v2
-            risk_delta=0.0,            # temporal module wires this in v2
+            baseline_similarity=1.0,  # temporal module wires this in v2
+            risk_delta=0.0,  # temporal module wires this in v2
         )
 
     # ── Decision logic ────────────────────────────────────────────────────────
 
-    def _apply_logic(
-        self, ctx: DecisionContext
-    ) -> tuple[Decision, str]:
+    def _apply_logic(self, ctx: DecisionContext) -> tuple[Decision, str]:
         """
         Apply the priority-ordered decision logic.
 

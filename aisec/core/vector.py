@@ -21,48 +21,48 @@ from __future__ import annotations
 
 TRADING_RISK_KEYWORDS: dict[str, float] = {
     # Critical — immediate threat
-    "manipulate":      1.0,
-    "override":        1.0,
-    "inject":          1.0,
-    "launder":         1.0,
-    "fake":            1.0,
+    "manipulate": 1.0,
+    "override": 1.0,
+    "inject": 1.0,
+    "launder": 1.0,
+    "fake": 1.0,
     # High risk
-    "large_trade":     0.8,
-    "bulk":            0.8,
-    "mass":            0.8,
-    "unrestricted":    0.8,
+    "large_trade": 0.8,
+    "bulk": 0.8,
+    "mass": 0.8,
+    "unrestricted": 0.8,
     # Medium risk
-    "after_hours":     0.6,
-    "bypass":          0.6,
-    "unlimited":       0.6,
+    "after_hours": 0.6,
+    "bypass": 0.6,
+    "unlimited": 0.6,
     # Lower risk — worth noting
-    "execute":         0.3,
-    "sell":            0.2,
-    "buy":             0.1,
+    "execute": 0.3,
+    "sell": 0.2,
+    "buy": 0.1,
 }
 
 # ── Urban AI keyword risk vocabulary ──────────────────────────────────────────
 
 URBAN_RISK_KEYWORDS: dict[str, float] = {
     # Critical
-    "curfew":          1.0,
-    "lockdown":        1.0,
-    "shutdown":        1.0,
-    "cut_power":       1.0,
-    "blackout":        1.0,
+    "curfew": 1.0,
+    "lockdown": 1.0,
+    "shutdown": 1.0,
+    "cut_power": 1.0,
+    "blackout": 1.0,
     # High risk
-    "restrict":        0.8,
-    "override":        0.8,
-    "disable":         0.8,
-    "mass":            0.8,
+    "restrict": 0.8,
+    "override": 0.8,
+    "disable": 0.8,
+    "mass": 0.8,
     # Medium risk
-    "redirect":        0.6,
-    "reroute":         0.6,
-    "emergency":       0.5,
+    "redirect": 0.6,
+    "reroute": 0.6,
+    "emergency": 0.5,
     # Lower risk
-    "adjust":          0.2,
-    "read":            0.0,
-    "monitor":         0.0,
+    "adjust": 0.2,
+    "read": 0.0,
+    "monitor": 0.0,
 }
 
 # ── Action type encoding ──────────────────────────────────────────────────────
@@ -72,27 +72,27 @@ URBAN_RISK_KEYWORDS: dict[str, float] = {
 
 ACTION_TYPE_ENCODING: dict[str, float] = {
     # Safe reads
-    "read_sensor":          0.0,
-    "read_market_data":     0.0,
-    "log_event":            0.0,
-    "get_status":           0.0,
+    "read_sensor": 0.0,
+    "read_market_data": 0.0,
+    "log_event": 0.0,
+    "get_status": 0.0,
     # Low risk writes
-    "minor_trade":          0.1,
-    "adjust_traffic_flow":  0.2,
-    "update_config":        0.3,
+    "minor_trade": 0.1,
+    "adjust_traffic_flow": 0.2,
+    "update_config": 0.3,
     # Medium risk
-    "execute_trade":        0.5,
-    "mass_traffic_redirect":0.6,
+    "execute_trade": 0.5,
+    "mass_traffic_redirect": 0.6,
     "override_traffic_system": 0.7,
     # High risk
-    "execute_large_trade":  0.8,
-    "shutdown_power_grid":  0.9,
-    "set_curfew":           0.9,
+    "execute_large_trade": 0.8,
+    "shutdown_power_grid": 0.9,
+    "set_curfew": 0.9,
     # Critical
     "manipulate_news_feed": 1.0,
-    "override_risk_limit":  1.0,
-    "cut_power":            1.0,
-    "lockdown_zone":        1.0,
+    "override_risk_limit": 1.0,
+    "cut_power": 1.0,
+    "lockdown_zone": 1.0,
 }
 
 # ── Sensitive targets ─────────────────────────────────────────────────────────

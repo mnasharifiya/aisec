@@ -27,8 +27,8 @@ import hashlib
 import os
 from typing import Protocol, runtime_checkable
 
-
 # ── Signer protocol ───────────────────────────────────────────────────────────
+
 
 @runtime_checkable
 class Signer(Protocol):
@@ -68,6 +68,7 @@ class Signer(Protocol):
 
 
 # ── HMAC implementation ───────────────────────────────────────────────────────
+
 
 class HMACSigner:
     """
@@ -110,8 +111,8 @@ class HMACSigner:
             raise ValueError(
                 f"No signing key provided. Set the {self.ENV_VAR} "
                 "environment variable or pass secret_key explicitly.\n"
-                "Generate a key with: python -c \"import secrets; "
-                "print(secrets.token_hex(32))\""
+                'Generate a key with: python -c "import secrets; '
+                'print(secrets.token_hex(32))"'
             )
         if len(key) < 32:
             raise ValueError(
@@ -155,6 +156,7 @@ class HMACSigner:
 
 
 # ── Null signer (testing only) ────────────────────────────────────────────────
+
 
 class NullSigner:
     """

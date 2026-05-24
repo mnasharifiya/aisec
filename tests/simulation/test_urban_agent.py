@@ -31,9 +31,7 @@ def agent(engine: AnalysisEngine) -> UrbanAgent:
 
 class TestUrbanAgentSecurity:
 
-    def test_all_dangerous_actions_are_blocked(
-        self, agent: UrbanAgent
-    ) -> None:
+    def test_all_dangerous_actions_are_blocked(self, agent: UrbanAgent) -> None:
         """Every dangerous city action must be blocked or escalated."""
         for action in DANGEROUS_ACTIONS:
             result = agent.attempt_action(action)
@@ -43,9 +41,7 @@ class TestUrbanAgentSecurity:
                 f"was NOT blocked. Decision: {result.decision}."
             )
 
-    def test_all_safe_actions_are_allowed(
-        self, agent: UrbanAgent
-    ) -> None:
+    def test_all_safe_actions_are_allowed(self, agent: UrbanAgent) -> None:
         """Routine city operations must not be blocked."""
         for action in SAFE_ACTIONS:
             result = agent.attempt_action(action)
@@ -54,9 +50,7 @@ class TestUrbanAgentSecurity:
                 f"with {result.decision}. False positive detected."
             )
 
-    def test_simulation_run_blocks_dangerous_actions(
-        self, agent: UrbanAgent
-    ) -> None:
+    def test_simulation_run_blocks_dangerous_actions(self, agent: UrbanAgent) -> None:
         """Full simulation confirms dangerous actions are intercepted."""
         results = agent.run(steps=40)
         dangerous_types = {a.action_type for a in DANGEROUS_ACTIONS}
@@ -85,15 +79,11 @@ class TestUrbanAgentSecurity:
         with pytest.raises(TypeError, match="AnalysisEngine"):
             UrbanAgent(None)  # type: ignore[arg-type]
 
-    def test_agent_rejects_zero_steps(
-        self, agent: UrbanAgent
-    ) -> None:
+    def test_agent_rejects_zero_steps(self, agent: UrbanAgent) -> None:
         with pytest.raises(ValueError, match="steps"):
             agent.run(steps=0)
 
-    def test_agent_id_is_always_class_constant(
-        self, agent: UrbanAgent
-    ) -> None:
+    def test_agent_id_is_always_class_constant(self, agent: UrbanAgent) -> None:
         """
         Agent identity submitted to the engine must always be
         the class constant — never anything else.

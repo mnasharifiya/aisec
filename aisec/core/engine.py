@@ -38,8 +38,8 @@ from aisec.core.vector import FeatureVectorBuilder
 from aisec.storage.audit import AuditLogger, DEFAULT_LOG_PATH
 from aisec.storage.models import AnalysisResult, Decision, Event
 
-
 # ── Engine result ─────────────────────────────────────────────────────────────
+
 
 @dataclass
 class EngineResult:
@@ -53,6 +53,7 @@ class EngineResult:
         blocked:          True if the action was blocked or escalated.
         requires_review:  True if a human analyst must review this action.
     """
+
     event: Event
     analysis: AnalysisResult
     log_entry_id: str
@@ -89,6 +90,7 @@ class EngineResult:
 
 
 # ── Analysis engine ───────────────────────────────────────────────────────────
+
 
 class AnalysisEngine:
     """

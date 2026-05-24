@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-
 # ── Timestamp creation ────────────────────────────────────────────────────────
+
 
 def now_utc() -> str:
     """
@@ -42,6 +42,7 @@ def from_timestamp(ts: float) -> str:
 
 # ── Timestamp parsing ─────────────────────────────────────────────────────────
 
+
 def parse_utc(ts_string: str) -> datetime:
     """
     Parse a UTC ISO-8601 string back into a datetime object.
@@ -65,6 +66,7 @@ def parse_utc(ts_string: str) -> datetime:
 
 
 # ── Comparison ────────────────────────────────────────────────────────────────
+
 
 def seconds_between(earlier: str, later: str) -> float:
     """

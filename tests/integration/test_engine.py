@@ -17,8 +17,8 @@ from aisec.core.engine import AnalysisEngine
 from aisec.storage.audit import AuditLogger
 from aisec.storage.models import Decision, Event, Scenario
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def engine(tmp_path: Path) -> AnalysisEngine:
@@ -48,12 +48,13 @@ def urban(action_type: str, target: str = "city_system", **payload) -> Event:
 
 # ── Core pipeline tests ───────────────────────────────────────────────────────
 
+
 class TestAnalysisEngine:
 
     def test_returns_engine_result(self, engine: AnalysisEngine) -> None:
         result = engine.analyse(trading("read_market_data"))
-        assert result.event        is not None
-        assert result.analysis     is not None
+        assert result.event is not None
+        assert result.analysis is not None
         assert result.log_entry_id != ""
 
     def test_safe_action_is_allowed(self, engine: AnalysisEngine) -> None:
@@ -78,9 +79,7 @@ class TestAnalysisEngine:
         assert result.decision == Decision.ESCALATE
 
     def test_curfew_is_blocked(self, engine: AnalysisEngine) -> None:
-        result = engine.analyse(
-            urban("set_curfew", zone="ALL", duration_hours=48)
-        )
+        result = engine.analyse(urban("set_curfew", zone="ALL", duration_hours=48))
         assert result.blocked
         assert result.decision == Decision.BLOCK
 
@@ -94,12 +93,8 @@ class TestAnalysisEngine:
         assert result.decision == Decision.ALLOW
         assert not result.blocked
 
-    def test_emergency_services_target_is_blocked(
-        self, engine: AnalysisEngine
-    ) -> None:
-        result = engine.analyse(
-            urban("adjust_routing", target="ambulance_routing")
-        )
+    def test_emergency_services_target_is_blocked(self, engine: AnalysisEngine) -> None:
+        result = engine.analyse(urban("adjust_routing", target="ambulance_routing"))
         assert result.blocked
 
     def test_risk_score_is_in_valid_range(self, engine: AnalysisEngine) -> None:
@@ -109,67 +104,58 @@ class TestAnalysisEngine:
 
 # ── Audit log integration tests ───────────────────────────────────────────────
 
+
 class TestAuditIntegration:
 
-    def test_every_analysis_writes_to_audit_log(
-        self, engine: AnalysisEngine
-    ) -> None:
+    def test_every_analysis_writes_to_audit_log(self, engine: AnalysisEngine) -> None:
         engine.analyse(trading("read_market_data"))
         engine.analyse(trading("execute_large_trade", amount=2_000_000))
         engine.analyse(urban("read_sensor"))
         assert engine.audit_count() == 3
 
-    def test_audit_chain_is_intact_after_analyses(
-        self, engine: AnalysisEngine
-    ) -> None:
+    def test_audit_chain_is_intact_after_analyses(self, engine: AnalysisEngine) -> None:
         for i in range(10):
             engine.analyse(trading("read_market_data"))
         ok, errors = engine.verify_audit_chain()
         assert ok is True
         assert errors == []
 
-    def test_blocked_actions_appear_in_audit_log(
-        self, tmp_path: Path
-    ) -> None:
+    def test_blocked_actions_appear_in_audit_log(self, tmp_path: Path) -> None:
         log_path = tmp_path / "audit.jsonl"
-        engine   = AnalysisEngine(log_path=log_path)
+        engine = AnalysisEngine(log_path=log_path)
 
         engine.analyse(trading("manipulate_news_feed"))
 
-        logger  = AuditLogger(log_path=log_path)
+        logger = AuditLogger(log_path=log_path)
         entries = logger.get_all()
         assert len(entries) == 1
         assert entries[0].payload["decision"] == "BLOCK"
         assert entries[0].payload["action_type"] == "manipulate_news_feed"
 
-    def test_audit_log_entry_contains_required_fields(
-        self, tmp_path: Path
-    ) -> None:
+    def test_audit_log_entry_contains_required_fields(self, tmp_path: Path) -> None:
         log_path = tmp_path / "audit.jsonl"
-        engine   = AnalysisEngine(log_path=log_path)
-        result   = engine.analyse(trading("read_market_data"))
+        engine = AnalysisEngine(log_path=log_path)
+        result = engine.analyse(trading("read_market_data"))
 
-        logger  = AuditLogger(log_path=log_path)
+        logger = AuditLogger(log_path=log_path)
         entries = logger.get_all()
 
         assert len(entries) == 1
         payload = entries[0].payload
 
-        assert "agent_id"    in payload
+        assert "agent_id" in payload
         assert "action_type" in payload
-        assert "risk_score"  in payload
-        assert "decision"    in payload
-        assert "rule_hits"   in payload
+        assert "risk_score" in payload
+        assert "decision" in payload
+        assert "rule_hits" in payload
         assert "explanation" in payload
 
-    def test_log_entry_id_matches_audit_entry(
-        self, tmp_path: Path
-    ) -> None:
+    def test_log_entry_id_matches_audit_entry(self, tmp_path: Path) -> None:
         log_path = tmp_path / "audit.jsonl"
-        engine   = AnalysisEngine(log_path=log_path)
-        result   = engine.analyse(trading("read_market_data"))
+        engine = AnalysisEngine(log_path=log_path)
+        result = engine.analyse(trading("read_market_data"))
 
-        logger  = AuditLogger(log_path=log_path)
+        logger = AuditLogger(log_path=log_path)
         entries = logger.get_all()
 
         assert entries[0].log_id == result.log_entry_id

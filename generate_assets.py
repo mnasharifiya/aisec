@@ -2,24 +2,28 @@ from PIL import Image, ImageEnhance, ImageFilter
 import numpy as np
 import os
 
+
 def create_ascii_portrait(image_path, width=50):
-    img = Image.open(image_path).convert('L')
+    img = Image.open(image_path).convert("L")
     img = ImageEnhance.Contrast(img).enhance(2.0)
     img = ImageEnhance.Sharpness(img).enhance(2.0)
     aspect_ratio = img.height / img.width
     height = 40
     img = img.resize((width, height), Image.Resampling.LANCZOS)
     pixels = np.array(img)
-    chars = '@%#*+=-:. '
+    chars = "@%#*+=-:. "
     lines = []
     for row in pixels:
-        lines.append(''.join(chars[int((255 - p) / 255 * (len(chars) - 1))] for p in row))
-    return '\n'.join(lines)
+        lines.append(
+            "".join(chars[int((255 - p) / 255 * (len(chars) - 1))] for p in row)
+        )
+    return "\n".join(lines)
+
 
 def main():
     print("??  Generating assets for Passport Layout...")
     photo_path = None
-    for ext in ['.jpg', '.jpeg', '.png']:
+    for ext in [".jpg", ".jpeg", ".png"]:
         if os.path.exists(f"photo{ext}"):
             photo_path = f"photo{ext}"
             break
@@ -63,6 +67,7 @@ SHIELD_CHECK = """[green]      __      [/green]
         f.write(assets_content)
     print("? Success! Created aisec/utils/assets.py")
     print("?? Portrait size: 30 chars wide (Perfect for Passport layout)")
+
 
 if __name__ == "__main__":
     main()

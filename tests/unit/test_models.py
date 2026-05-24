@@ -14,17 +14,17 @@ from aisec.storage.models import (
     Severity,
 )
 
-
 # ── Event tests ───────────────────────────────────────────────────────────────
+
 
 class TestEvent:
 
     def test_creates_valid_event(self) -> None:
         e = Event(action_type="buy_stock", agent_id="trading_bot", target="AAPL")
         assert e.action_type == "buy_stock"
-        assert e.agent_id    == "trading_bot"
-        assert e.event_id    != ""
-        assert e.timestamp   != ""
+        assert e.agent_id == "trading_bot"
+        assert e.event_id != ""
+        assert e.timestamp != ""
 
     def test_rejects_empty_action_type(self) -> None:
         with pytest.raises(ValueError, match="action_type"):
@@ -45,6 +45,7 @@ class TestEvent:
 
 
 # ── FeatureVector tests ───────────────────────────────────────────────────────
+
 
 class TestFeatureVector:
 
@@ -69,6 +70,7 @@ class TestFeatureVector:
 
 # ── AnalysisResult tests ──────────────────────────────────────────────────────
 
+
 class TestAnalysisResult:
 
     def test_creates_valid_result(self) -> None:
@@ -79,7 +81,7 @@ class TestAnalysisResult:
             explanation="High-value trade exceeds threshold",
         )
         assert r.risk_score == 0.85
-        assert r.decision   == Decision.BLOCK
+        assert r.decision == Decision.BLOCK
 
     def test_rejects_score_above_one(self) -> None:
         with pytest.raises(ValueError, match="risk_score"):
@@ -95,12 +97,13 @@ class TestAnalysisResult:
             AnalysisResult(
                 event_id="abc",
                 risk_score=0.5,
-                decision="BLOCK",           # string instead of enum
+                decision="BLOCK",  # string instead of enum
                 explanation="test",
             )
 
 
 # ── AuditLogEntry tests ───────────────────────────────────────────────────────
+
 
 class TestAuditLogEntry:
 
@@ -111,7 +114,7 @@ class TestAuditLogEntry:
             payload={"action": "buy"},
             prev_hash="0",
         )
-        assert len(entry.current_hash) == 64   # SHA-256 hex digest
+        assert len(entry.current_hash) == 64  # SHA-256 hex digest
 
     def test_verify_passes_for_unmodified_entry(self) -> None:
         entry = AuditLogEntry(

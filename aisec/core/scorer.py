@@ -32,7 +32,6 @@ import numpy as np
 
 from aisec.storage.models import FeatureVector, Scenario
 
-
 # ── Weight sets ───────────────────────────────────────────────────────────────
 #
 # Feature vector dimension order (must match models.FeatureVector.dimensions):
@@ -56,43 +55,50 @@ from aisec.storage.models import FeatureVector, Scenario
 #     network_access (city-wide broadcasts are high risk),
 #     privilege (overriding safety systems).
 
-TRADING_AI_WEIGHTS = np.array([
-    0.15,   # action_type_encoding  — moderate; type alone is not decisive
-    0.25,   # keyword_risk_score    — strong signal; "manipulate", "override"
-    0.10,   # frequency_score       — burst trading is suspicious
-    0.20,   # api_call_flag         — all external trades are elevated risk
-    0.05,   # file_access_flag      — low relevance for trading
-    0.10,   # network_access_flag   — relevant for data exfiltration
-    0.05,   # sensitive_path_flag   — low relevance for trading
-    0.10,   # privilege_flag        — risk limit overrides are high risk
-], dtype=np.float64)
+TRADING_AI_WEIGHTS = np.array(
+    [
+        0.15,  # action_type_encoding  — moderate; type alone is not decisive
+        0.25,  # keyword_risk_score    — strong signal; "manipulate", "override"
+        0.10,  # frequency_score       — burst trading is suspicious
+        0.20,  # api_call_flag         — all external trades are elevated risk
+        0.05,  # file_access_flag      — low relevance for trading
+        0.10,  # network_access_flag   — relevant for data exfiltration
+        0.05,  # sensitive_path_flag   — low relevance for trading
+        0.10,  # privilege_flag        — risk limit overrides are high risk
+    ],
+    dtype=np.float64,
+)
 
-TRADING_AI_BIAS = -0.05   # Slight negative bias — trading agents act frequently
+TRADING_AI_BIAS = -0.05  # Slight negative bias — trading agents act frequently
 
-URBAN_AI_WEIGHTS = np.array([
-    0.10,   # action_type_encoding  — moderate signal
-    0.15,   # keyword_risk_score    — "curfew", "shutdown", "lockdown"
-    0.10,   # frequency_score       — repeated commands are suspicious
-    0.10,   # api_call_flag         — external API calls matter less here
-    0.10,   # file_access_flag      — config file access is concerning
-    0.15,   # network_access_flag   — city-wide broadcasts are high risk
-    0.20,   # sensitive_path_flag   — targeting protected systems
-    0.10,   # privilege_flag        — overriding safety systems
-], dtype=np.float64)
+URBAN_AI_WEIGHTS = np.array(
+    [
+        0.10,  # action_type_encoding  — moderate signal
+        0.15,  # keyword_risk_score    — "curfew", "shutdown", "lockdown"
+        0.10,  # frequency_score       — repeated commands are suspicious
+        0.10,  # api_call_flag         — external API calls matter less here
+        0.10,  # file_access_flag      — config file access is concerning
+        0.15,  # network_access_flag   — city-wide broadcasts are high risk
+        0.20,  # sensitive_path_flag   — targeting protected systems
+        0.10,  # privilege_flag        — overriding safety systems
+    ],
+    dtype=np.float64,
+)
 
-URBAN_AI_BIAS = -0.05   # Slight negative bias — routine city operations are common
+URBAN_AI_BIAS = -0.05  # Slight negative bias — routine city operations are common
 
 # Default weights used when scenario is unknown
 DEFAULT_WEIGHTS = np.array([0.125] * 8, dtype=np.float64)
-DEFAULT_BIAS    = 0.0
+DEFAULT_BIAS = 0.0
 
 SCENARIO_WEIGHTS: dict[Scenario, tuple[np.ndarray, float]] = {
     Scenario.TRADING_AI: (TRADING_AI_WEIGHTS, TRADING_AI_BIAS),
-    Scenario.URBAN_AI:   (URBAN_AI_WEIGHTS,   URBAN_AI_BIAS),
+    Scenario.URBAN_AI: (URBAN_AI_WEIGHTS, URBAN_AI_BIAS),
 }
 
 
 # ── Scorer ────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ScoreResult:
@@ -106,10 +112,11 @@ class ScoreResult:
         weights_used:   Name of the weight set applied.
         explanation:    Human-readable breakdown for analysts.
     """
-    risk_score:   float
-    raw_score:    float
+
+    risk_score: float
+    raw_score: float
     weights_used: str
-    explanation:  str
+    explanation: str
 
 
 class RiskScorer:
@@ -157,9 +164,9 @@ class RiskScorer:
         )
         weights_name = scenario.value
 
-        x         = np.array(fv.vector, dtype=np.float64)
+        x = np.array(fv.vector, dtype=np.float64)
         raw_score = float(np.dot(weights, x) + bias)
-        risk      = self._sigmoid(raw_score)
+        risk = self._sigmoid(raw_score)
 
         explanation = self._build_explanation(x, weights, bias, raw_score, risk)
 
@@ -207,7 +214,11 @@ class RiskScorer:
             if contrib > 0.01:
                 contributions.append(f"{name}={value:.2f}×{weight:.2f}={contrib:.3f}")
 
-        contrib_str = ", ".join(contributions) if contributions else "no significant contributions"
+        contrib_str = (
+            ", ".join(contributions)
+            if contributions
+            else "no significant contributions"
+        )
         return (
             f"raw={raw:.4f}, sigmoid={risk:.4f} | "
             f"top contributors: {contrib_str} | bias={b:.2f}"

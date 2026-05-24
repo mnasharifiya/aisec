@@ -57,6 +57,7 @@ _last_decision_time: float = 0.0
 
 # ── SOC queue ─────────────────────────────────────────────────────────────────
 
+
 class SOCQueue:
     """
     In-memory queue of events requiring analyst review.
@@ -66,9 +67,9 @@ class SOCQueue:
     """
 
     def __init__(self, audit_logger: AuditLogger) -> None:
-        self._pending:   list[EngineResult] = []
-        self._resolved:  list[tuple[EngineResult, str, str]] = []
-        self._logger     = audit_logger
+        self._pending: list[EngineResult] = []
+        self._resolved: list[tuple[EngineResult, str, str]] = []
+        self._logger = audit_logger
 
     def submit(self, result: EngineResult) -> None:
         """Add a flagged event to the review queue."""
@@ -107,8 +108,7 @@ class SOCQueue:
 
         # Remove from pending
         self._pending = [
-            r for r in self._pending
-            if r.event.event_id != result.event.event_id
+            r for r in self._pending if r.event.event_id != result.event.event_id
         ]
 
         # Record resolution
@@ -119,13 +119,13 @@ class SOCQueue:
             record_type="analyst_decision",
             record_id=result.event.event_id,
             payload={
-                "analyst_id":       analyst_id,
+                "analyst_id": analyst_id,
                 "analyst_decision": analyst_decision,
-                "reason":           reason,
-                "action_type":      result.event.action_type,
-                "agent_id":         result.event.agent_id,
-                "original_decision":result.analysis.decision.value,
-                "risk_score":       result.analysis.risk_score,
+                "reason": reason,
+                "action_type": result.event.action_type,
+                "agent_id": result.event.agent_id,
+                "original_decision": result.analysis.decision.value,
+                "risk_score": result.analysis.risk_score,
             },
         )
 
@@ -142,9 +142,7 @@ class SOCQueue:
 
     def stats(self) -> dict[str, int]:
         """Return counts of each analyst decision type."""
-        counts: dict[str, int] = {
-            "approve": 0, "block": 0, "escalate": 0
-        }
+        counts: dict[str, int] = {"approve": 0, "block": 0, "escalate": 0}
         for _, decision, _ in self._resolved:
             counts[decision] = counts.get(decision, 0) + 1
         return counts
@@ -153,9 +151,9 @@ class SOCQueue:
 # ── Display helpers ───────────────────────────────────────────────────────────
 
 _DECISION_STYLE: dict[Decision, str] = {
-    Decision.ALLOW:          "bold green",
-    Decision.BLOCK:          "bold red",
-    Decision.ESCALATE:       "bold magenta",
+    Decision.ALLOW: "bold green",
+    Decision.BLOCK: "bold red",
+    Decision.ESCALATE: "bold magenta",
     Decision.PENDING_REVIEW: "bold yellow",
 }
 
@@ -183,18 +181,18 @@ def _print_queue_table(queue: SOCQueue) -> None:
         show_lines=True,
     )
 
-    table.add_column("#",          width=4,  no_wrap=True)
-    table.add_column("Agent",      width=16, no_wrap=True, style="cyan")
-    table.add_column("Action",     width=28, no_wrap=True)
-    table.add_column("Target",     width=22, no_wrap=True, style="dim white")
-    table.add_column("Decision",   width=12, no_wrap=True)
-    table.add_column("Risk",       width=8,  no_wrap=True)
-    table.add_column("Reason",     min_width=30)
+    table.add_column("#", width=4, no_wrap=True)
+    table.add_column("Agent", width=16, no_wrap=True, style="cyan")
+    table.add_column("Action", width=28, no_wrap=True)
+    table.add_column("Target", width=22, no_wrap=True, style="dim white")
+    table.add_column("Decision", width=12, no_wrap=True)
+    table.add_column("Risk", width=8, no_wrap=True)
+    table.add_column("Reason", min_width=30)
 
     for i, result in enumerate(pending, start=1):
         decision = result.analysis.decision
-        style    = _DECISION_STYLE.get(decision, "white")
-        reason   = result.analysis.explanation[:55]
+        style = _DECISION_STYLE.get(decision, "white")
+        reason = result.analysis.explanation[:55]
         if len(result.analysis.explanation) > 55:
             reason += "…"
 
@@ -214,61 +212,68 @@ def _print_queue_table(queue: SOCQueue) -> None:
 def _print_event_detail(result: EngineResult, index: int) -> None:
     """Print full details of a single event for analyst review."""
     decision = result.analysis.decision
-    style    = _DECISION_STYLE.get(decision, "white")
+    style = _DECISION_STYLE.get(decision, "white")
 
     console.print()
-    console.print(Panel(
-        f"[bold]Event ID:[/]        {result.event.event_id}\n"
-        f"[bold]Timestamp:[/]       {result.event.timestamp}\n"
-        f"[bold]Agent:[/]           {result.event.agent_id}\n"
-        f"[bold]Scenario:[/]        {result.event.scenario.value}\n"
-        f"[bold]Action:[/]          {result.event.action_type}\n"
-        f"[bold]Target:[/]          {result.event.target}\n"
-        f"[bold]Payload:[/]         {result.event.raw_payload}\n"
-        f"[bold]Risk score:[/]      {result.analysis.risk_score:.4f}\n"
-        f"[bold]Decision:[/]        [{style}]{decision.value}[/{style}]\n"
-        f"[bold]Rules fired:[/]     {result.analysis.rule_hits or 'none'}\n"
-        f"[bold]Explanation:[/]     {result.analysis.explanation}",
-        title=f"[bold yellow]Event #{index} — Analyst Review[/bold yellow]",
-        border_style="yellow",
-    ))
+    console.print(
+        Panel(
+            f"[bold]Event ID:[/]        {result.event.event_id}\n"
+            f"[bold]Timestamp:[/]       {result.event.timestamp}\n"
+            f"[bold]Agent:[/]           {result.event.agent_id}\n"
+            f"[bold]Scenario:[/]        {result.event.scenario.value}\n"
+            f"[bold]Action:[/]          {result.event.action_type}\n"
+            f"[bold]Target:[/]          {result.event.target}\n"
+            f"[bold]Payload:[/]         {result.event.raw_payload}\n"
+            f"[bold]Risk score:[/]      {result.analysis.risk_score:.4f}\n"
+            f"[bold]Decision:[/]        [{style}]{decision.value}[/{style}]\n"
+            f"[bold]Rules fired:[/]     {result.analysis.rule_hits or 'none'}\n"
+            f"[bold]Explanation:[/]     {result.analysis.explanation}",
+            title=f"[bold yellow]Event #{index} — Analyst Review[/bold yellow]",
+            border_style="yellow",
+        )
+    )
     console.print()
 
 
 def _print_soc_header(queue: SOCQueue, analyst_id: str) -> None:
     """Print the SOC console header panel."""
     stats = queue.stats()
-    console.print(Panel(
-        f"[bold white]Analyst:[/]       {analyst_id}\n"
-        f"[bold yellow]Pending:[/]       {queue.pending_count()}\n"
-        f"[bold white]Resolved:[/]       {queue.resolved_count()}   "
-        f"([green]approved: {stats['approve']}[/green]  "
-        f"[red]blocked: {stats['block']}[/red]  "
-        f"[magenta]escalated: {stats['escalate']}[/magenta])",
-        title="[bold cyan]AISec SOC Console — Analyst Mode[/bold cyan]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold white]Analyst:[/]       {analyst_id}\n"
+            f"[bold yellow]Pending:[/]       {queue.pending_count()}\n"
+            f"[bold white]Resolved:[/]       {queue.resolved_count()}   "
+            f"([green]approved: {stats['approve']}[/green]  "
+            f"[red]blocked: {stats['block']}[/red]  "
+            f"[magenta]escalated: {stats['escalate']}[/magenta])",
+            title="[bold cyan]AISec SOC Console — Analyst Mode[/bold cyan]",
+            border_style="cyan",
+        )
+    )
 
 
 def _print_help() -> None:
     """Print available SOC console commands."""
-    console.print(Panel(
-        "[bold cyan]queue[/]              Show all pending events\n"
-        "[bold cyan]review <N>[/]         Review event number N in detail\n"
-        "[bold cyan]approve <N>[/]        Approve event N — allow action to proceed\n"
-        "[bold cyan]block <N>[/]          Block event N — action is denied\n"
-        "[bold cyan]escalate <N>[/]       Escalate event N to senior analyst\n"
-        "[bold cyan]stats[/]              Show session statistics\n"
-        "[bold cyan]verify[/]             Verify audit log hash chain integrity\n"
-        "[bold cyan]logs [N][/]           Show last N audit log entries (default 10)\n"
-        "[bold cyan]help[/]               Show this help message\n"
-        "[bold cyan]exit[/]               Exit the SOC console",
-        title="[bold]Available Commands[/bold]",
-        border_style="dim",
-    ))
+    console.print(
+        Panel(
+            "[bold cyan]queue[/]              Show all pending events\n"
+            "[bold cyan]review <N>[/]         Review event number N in detail\n"
+            "[bold cyan]approve <N>[/]        Approve event N — allow action to proceed\n"
+            "[bold cyan]block <N>[/]          Block event N — action is denied\n"
+            "[bold cyan]escalate <N>[/]       Escalate event N to senior analyst\n"
+            "[bold cyan]stats[/]              Show session statistics\n"
+            "[bold cyan]verify[/]             Verify audit log hash chain integrity\n"
+            "[bold cyan]logs [N][/]           Show last N audit log entries (default 10)\n"
+            "[bold cyan]help[/]               Show this help message\n"
+            "[bold cyan]exit[/]               Exit the SOC console",
+            title="[bold]Available Commands[/bold]",
+            border_style="dim",
+        )
+    )
 
 
 # ── Command parser ────────────────────────────────────────────────────────────
+
 
 def _parse_index(parts: list[str], queue: SOCQueue) -> int | None:
     """
@@ -298,7 +303,7 @@ def _parse_index(parts: list[str], queue: SOCQueue) -> int | None:
         )
         return None
 
-    return n - 1   # Convert to 0-based index
+    return n - 1  # Convert to 0-based index
 
 
 def _confirm_action(action_name: str, event_num: int) -> bool:
@@ -336,7 +341,7 @@ def _check_rate_limit() -> bool:
     faster than a human could reasonably review them.
     """
     global _last_decision_time
-    now     = _time.monotonic()
+    now = _time.monotonic()
     elapsed = now - _last_decision_time
     if elapsed < _MIN_DECISION_INTERVAL:
         remaining = _MIN_DECISION_INTERVAL - elapsed
@@ -353,6 +358,7 @@ def _check_rate_limit() -> bool:
 
 # ── SOC session ───────────────────────────────────────────────────────────────
 
+
 def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
     """
     Run the interactive SOC analyst console session.
@@ -360,9 +366,11 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
     Accepts typed commands in a loop until the analyst exits.
     Uses prompt_toolkit for a polished readline-style prompt.
     """
-    prompt_style = Style.from_dict({
-        "prompt": "ansicyan bold",
-    })
+    prompt_style = Style.from_dict(
+        {
+            "prompt": "ansicyan bold",
+        }
+    )
 
     session: PromptSession[str] = PromptSession()
 
@@ -370,8 +378,7 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
     _print_soc_header(queue, analyst_id)
     console.print()
     console.print(
-        Text("  Type 'help' for available commands, 'exit' to quit.",
-             style="dim")
+        Text("  Type 'help' for available commands, 'exit' to quit.", style="dim")
     )
     console.print()
 
@@ -388,9 +395,9 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
             continue
 
         # Sanitise — truncate to prevent absurdly long inputs
-        raw   = raw[:256]
+        raw = raw[:256]
         parts = raw.split()
-        cmd   = parts[0].lower()
+        cmd = parts[0].lower()
 
         # ── Commands ──────────────────────────────────────────────────────────
 
@@ -418,11 +425,17 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
                 result = queue.pending()[idx]
                 _print_event_detail(result, idx + 1)
                 if _confirm_action("approve", idx + 1):
-                    queue.resolve(result, "approve", analyst_id,
-                                  reason="Analyst approved after review")
+                    queue.resolve(
+                        result,
+                        "approve",
+                        analyst_id,
+                        reason="Analyst approved after review",
+                    )
                     console.print(
-                        Text(f"  ✔ Event #{idx+1} approved and logged.",
-                             style="bold green")
+                        Text(
+                            f"  ✔ Event #{idx+1} approved and logged.",
+                            style="bold green",
+                        )
                     )
 
         elif cmd == "block":
@@ -433,11 +446,16 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
                 result = queue.pending()[idx]
                 _print_event_detail(result, idx + 1)
                 if _confirm_action("block", idx + 1):
-                    queue.resolve(result, "block", analyst_id,
-                                  reason="Analyst blocked after review")
+                    queue.resolve(
+                        result,
+                        "block",
+                        analyst_id,
+                        reason="Analyst blocked after review",
+                    )
                     console.print(
-                        Text(f"  ✘ Event #{idx+1} blocked and logged.",
-                             style="bold red")
+                        Text(
+                            f"  ✘ Event #{idx+1} blocked and logged.", style="bold red"
+                        )
                     )
 
         elif cmd == "escalate":
@@ -448,11 +466,17 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
                 result = queue.pending()[idx]
                 _print_event_detail(result, idx + 1)
                 if _confirm_action("escalate", idx + 1):
-                    queue.resolve(result, "escalate", analyst_id,
-                                  reason="Escalated to senior analyst")
+                    queue.resolve(
+                        result,
+                        "escalate",
+                        analyst_id,
+                        reason="Escalated to senior analyst",
+                    )
                     console.print(
-                        Text(f"  ⬆ Event #{idx+1} escalated and logged.",
-                             style="bold magenta")
+                        Text(
+                            f"  ⬆ Event #{idx+1} escalated and logged.",
+                            style="bold magenta",
+                        )
                     )
 
         elif cmd == "stats":
@@ -467,13 +491,17 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
             ok, errors = queue.verify_chain()
             if ok:
                 console.print(
-                    Text("  ✔ Audit chain INTACT — no tampering detected.",
-                         style="bold green")
+                    Text(
+                        "  ✔ Audit chain INTACT — no tampering detected.",
+                        style="bold green",
+                    )
                 )
             else:
                 console.print(
-                    Text(f"  ✘ Audit chain BROKEN — {len(errors)} error(s):",
-                         style="bold red")
+                    Text(
+                        f"  ✘ Audit chain BROKEN — {len(errors)} error(s):",
+                        style="bold red",
+                    )
                 )
                 for err in errors:
                     console.print(Text(f"    • {err}", style="red"))
@@ -493,26 +521,31 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
                 Text(f"  Last {len(entries)} audit log entries:", style="dim")
             )
             for entry in entries:
-                ts      = entry.timestamp[11:19]
+                ts = entry.timestamp[11:19]
                 payload = entry.payload
-                action  = payload.get("action_type", payload.get("analyst_decision", "?"))
+                action = payload.get(
+                    "action_type", payload.get("analyst_decision", "?")
+                )
                 decision = payload.get("decision", payload.get("analyst_decision", "?"))
                 console.print(
-                    Text(f"  [{ts}] ", style="dim") +
-                    Text(f"{entry.record_type:<18} ", style="cyan") +
-                    Text(f"{action:<28} ", style="white") +
-                    Text(f"{decision}", style="yellow")
+                    Text(f"  [{ts}] ", style="dim")
+                    + Text(f"{entry.record_type:<18} ", style="cyan")
+                    + Text(f"{action:<28} ", style="white")
+                    + Text(f"{decision}", style="yellow")
                 )
             console.print()
 
         else:
             console.print(
-                Text(f"  Unknown command: '{cmd}'. Type 'help' for commands.",
-                     style="red")
+                Text(
+                    f"  Unknown command: '{cmd}'. Type 'help' for commands.",
+                    style="red",
+                )
             )
 
 
 # ── Click command ─────────────────────────────────────────────────────────────
+
 
 @click.command("soc")
 @click.option(
@@ -555,24 +588,23 @@ def soc_command(analyst: str, scenario: str, steps: int) -> None:
         analyst = "analyst_01"
 
     log_path = Path(".aisec") / "soc_session.jsonl"
-    engine   = AnalysisEngine(log_path=log_path)
-    logger   = AuditLogger(log_path=log_path)
-    queue    = SOCQueue(audit_logger=logger)
+    engine = AnalysisEngine(log_path=log_path)
+    logger = AuditLogger(log_path=log_path)
+    queue = SOCQueue(audit_logger=logger)
 
     console.print()
     console.print(
-        Text("  Simulating agent actions — populating SOC queue...",
-             style="dim")
+        Text("  Simulating agent actions — populating SOC queue...", style="dim")
     )
 
     # Run simulation and collect flagged events
-    import random   # Non-cryptographic — simulation only, not security-sensitive
+    import random  # Non-cryptographic — simulation only, not security-sensitive
 
     trading_pool = TRADING_SAFE * 2 + TRADING_DANGEROUS
-    urban_pool   = URBAN_SAFE   * 3 + URBAN_DANGEROUS
+    urban_pool = URBAN_SAFE * 3 + URBAN_DANGEROUS
 
     trading_agent = TradingAgent(engine)
-    urban_agent   = UrbanAgent(engine)
+    urban_agent = UrbanAgent(engine)
 
     flagged = 0
     for i in range(steps):
@@ -609,15 +641,17 @@ def soc_command(analyst: str, scenario: str, steps: int) -> None:
     # Exit summary
     console.print()
     stats = queue.stats()
-    console.print(Panel(
-        f"[bold white]Session complete[/bold white]\n"
-        f"Analyst:          {analyst}\n"
-        f"Events reviewed:  {queue.resolved_count()}\n"
-        f"Approved:         [green]{stats['approve']}[/green]\n"
-        f"Blocked:          [red]{stats['block']}[/red]\n"
-        f"Escalated:        [magenta]{stats['escalate']}[/magenta]\n"
-        f"Still pending:    [yellow]{queue.pending_count()}[/yellow]",
-        title="[bold cyan]SOC Session Summary[/bold cyan]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold white]Session complete[/bold white]\n"
+            f"Analyst:          {analyst}\n"
+            f"Events reviewed:  {queue.resolved_count()}\n"
+            f"Approved:         [green]{stats['approve']}[/green]\n"
+            f"Blocked:          [red]{stats['block']}[/red]\n"
+            f"Escalated:        [magenta]{stats['escalate']}[/magenta]\n"
+            f"Still pending:    [yellow]{queue.pending_count()}[/yellow]",
+            title="[bold cyan]SOC Session Summary[/bold cyan]",
+            border_style="cyan",
+        )
+    )
     console.print()

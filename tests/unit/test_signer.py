@@ -25,25 +25,25 @@ class TestHMACSigner:
 
     def test_sign_returns_64_char_hex(self) -> None:
         signer = HMACSigner(secret_key="a" * 32)
-        sig    = signer.sign(b"test data")
+        sig = signer.sign(b"test data")
         assert len(sig) == 64
         assert all(c in "0123456789abcdef" for c in sig)
 
     def test_verify_valid_signature(self) -> None:
         signer = HMACSigner(secret_key="a" * 32)
-        data   = b"audit entry content"
-        sig    = signer.sign(data)
+        data = b"audit entry content"
+        sig = signer.sign(data)
         assert signer.verify(data, sig) is True
 
     def test_verify_rejects_tampered_data(self) -> None:
         signer = HMACSigner(secret_key="a" * 32)
-        sig    = signer.sign(b"original")
+        sig = signer.sign(b"original")
         assert signer.verify(b"tampered", sig) is False
 
     def test_verify_rejects_wrong_key(self) -> None:
         signer1 = HMACSigner(secret_key="a" * 32)
         signer2 = HMACSigner(secret_key="b" * 32)
-        sig     = signer1.sign(b"data")
+        sig = signer1.sign(b"data")
         assert signer2.verify(b"data", sig) is False
 
     def test_rejects_short_key(self) -> None:
@@ -55,12 +55,10 @@ class TestHMACSigner:
         with pytest.raises(ValueError, match="AISEC_SIGNING_KEY"):
             HMACSigner()
 
-    def test_reads_key_from_environment(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_reads_key_from_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AISEC_SIGNING_KEY", "e" * 32)
         signer = HMACSigner()
-        sig    = signer.sign(b"data")
+        sig = signer.sign(b"data")
         assert signer.verify(b"data", sig) is True
 
     def test_repr_does_not_expose_key(self) -> None:

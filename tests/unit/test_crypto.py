@@ -28,14 +28,16 @@ from aisec.utils.time import (
     seconds_between,
 )
 
-
 # ── SHA-256 hashing ───────────────────────────────────────────────────────────
+
 
 class TestSha256Hex:
 
     def test_known_hash(self) -> None:
         result = sha256_hex("hello")
-        assert result == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        assert (
+            result == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
 
     def test_accepts_bytes(self) -> None:
         assert sha256_hex(b"hello") == sha256_hex("hello")
@@ -68,6 +70,7 @@ class TestSha256File:
 
 # ── HMAC signing ──────────────────────────────────────────────────────────────
 
+
 class TestSigning:
 
     def test_sign_and_verify_succeeds(self) -> None:
@@ -90,6 +93,7 @@ class TestSigning:
 
 
 # ── Policy file integrity ─────────────────────────────────────────────────────
+
 
 class TestPolicyFileIntegrity:
 
@@ -116,6 +120,7 @@ class TestPolicyFileIntegrity:
 
 # ── Key generation ────────────────────────────────────────────────────────────
 
+
 class TestKeyGeneration:
 
     def test_generates_64_char_key_by_default(self) -> None:
@@ -130,6 +135,7 @@ class TestKeyGeneration:
 
 # ── Canonical JSON ────────────────────────────────────────────────────────────
 
+
 class TestCanonicalJson:
 
     def test_sorted_keys(self) -> None:
@@ -143,6 +149,7 @@ class TestCanonicalJson:
 
 
 # ── Timestamp utilities ───────────────────────────────────────────────────────
+
 
 class TestTimestamps:
 

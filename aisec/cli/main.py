@@ -178,9 +178,7 @@ def cli(ctx):
 def start():
     """Start the monitoring engine"""
 
-    console.print(
-        "\n[bold green]▶ Starting AISec engine...[/bold green]\n"
-    )
+    console.print("\n[bold green]▶ Starting AISec engine...[/bold green]\n")
 
 
 # Register CLI commands
@@ -188,6 +186,8 @@ cli.add_command(monitor_command)
 cli.add_command(soc_command)
 cli.add_command(stats_command)
 cli.add_command(logs_command)
+
+
 def main() -> None:
     cli()
 

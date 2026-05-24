@@ -37,6 +37,7 @@ console = Console()
 
 # ── Display helpers ───────────────────────────────────────────────────────────
 
+
 def _bar(value: int, total: int, width: int = 20) -> str:
     """
     Render a proportional bar chart segment.
@@ -46,7 +47,7 @@ def _bar(value: int, total: int, width: int = 20) -> str:
     if total == 0:
         return "░" * width
     filled = int((value / total) * width)
-    empty  = width - filled
+    empty = width - filled
     return "█" * filled + "░" * empty
 
 
@@ -55,13 +56,14 @@ def _risk_level(score: float) -> tuple[str, str]:
     if score >= 0.80:
         return "CRITICAL", "bold red"
     if score >= 0.60:
-        return "HIGH",     "bold yellow"
+        return "HIGH", "bold yellow"
     if score >= 0.30:
-        return "MEDIUM",   "yellow"
+        return "MEDIUM", "yellow"
     return "LOW", "green"
 
 
 # ── Statistics computation ────────────────────────────────────────────────────
+
 
 def _compute_stats(entries: list) -> dict:
     """
@@ -70,8 +72,8 @@ def _compute_stats(entries: list) -> dict:
     Returns a dictionary with all metrics needed by the display
     functions. Separates analysis entries from analyst decisions.
     """
-    analysis_entries  = [e for e in entries if e.record_type == "analysis"]
-    analyst_entries   = [e for e in entries if e.record_type == "analyst_decision"]
+    analysis_entries = [e for e in entries if e.record_type == "analysis"]
+    analyst_entries = [e for e in entries if e.record_type == "analyst_decision"]
 
     total = len(analysis_entries)
 
@@ -98,7 +100,7 @@ def _compute_stats(entries: list) -> dict:
         "critical (≥0.80)": sum(1 for s in scores if s >= 0.80),
         "high (0.60-0.80)": sum(1 for s in scores if 0.60 <= s < 0.80),
         "medium (0.30-0.60)": sum(1 for s in scores if 0.30 <= s < 0.60),
-        "low (<0.30)":       sum(1 for s in scores if s < 0.30),
+        "low (<0.30)": sum(1 for s in scores if s < 0.30),
     }
 
     # Agent activity
@@ -133,40 +135,41 @@ def _compute_stats(entries: list) -> dict:
         scenario_counts[scenario] += 1
 
     return {
-        "total":            total,
-        "decision_counts":  decision_counts,
-        "avg_risk":         avg_risk,
-        "max_risk":         max_risk,
-        "min_risk":         min_risk,
-        "risk_buckets":     risk_buckets,
-        "agent_counts":     agent_counts,
-        "blocked_actions":  blocked_actions,
-        "rule_hits":        rule_hits,
-        "analyst_counts":   analyst_counts,
-        "scenario_counts":  scenario_counts,
-        "analyst_total":    len(analyst_entries),
+        "total": total,
+        "decision_counts": decision_counts,
+        "avg_risk": avg_risk,
+        "max_risk": max_risk,
+        "min_risk": min_risk,
+        "risk_buckets": risk_buckets,
+        "agent_counts": agent_counts,
+        "blocked_actions": blocked_actions,
+        "rule_hits": rule_hits,
+        "analyst_counts": analyst_counts,
+        "scenario_counts": scenario_counts,
+        "analyst_total": len(analyst_entries),
     }
 
 
 # ── Panels ────────────────────────────────────────────────────────────────────
 
+
 def _decision_panel(stats: dict) -> Panel:
     """Render the decision distribution panel."""
-    total   = stats["total"]
-    counts  = stats["decision_counts"]
+    total = stats["total"]
+    counts = stats["decision_counts"]
 
     lines = []
     order = [
-        (Decision.BLOCK.value,          "bold red"),
-        (Decision.ESCALATE.value,       "bold magenta"),
+        (Decision.BLOCK.value, "bold red"),
+        (Decision.ESCALATE.value, "bold magenta"),
         (Decision.PENDING_REVIEW.value, "bold yellow"),
-        (Decision.ALLOW.value,          "bold green"),
+        (Decision.ALLOW.value, "bold green"),
     ]
 
     for decision_val, style in order:
         count = counts.get(decision_val, 0)
-        pct   = (count / total * 100) if total > 0 else 0
-        bar   = _bar(count, total, width=24)
+        pct = (count / total * 100) if total > 0 else 0
+        bar = _bar(count, total, width=24)
         lines.append(
             f"[{style}]{decision_val:<16}[/{style}] "
             f"[cyan]{bar}[/cyan] "
@@ -186,11 +189,11 @@ def _decision_panel(stats: dict) -> Panel:
 
 def _risk_panel(stats: dict) -> Panel:
     """Render the risk score statistics panel."""
-    avg  = stats["avg_risk"]
+    avg = stats["avg_risk"]
     high = stats["max_risk"]
-    low  = stats["min_risk"]
+    low = stats["min_risk"]
     buckets = stats["risk_buckets"]
-    total   = stats["total"]
+    total = stats["total"]
 
     avg_label, avg_style = _risk_level(avg)
     max_label, max_style = _risk_level(high)
@@ -212,7 +215,7 @@ def _risk_panel(stats: dict) -> Panel:
 
     for label, count in buckets.items():
         style = bucket_styles.get(label, "white")
-        bar   = _bar(count, total, width=16)
+        bar = _bar(count, total, width=16)
         lines.append(
             f"  [{style}]{label:<22}[/{style}] "
             f"[cyan]{bar}[/cyan] [white]{count}[/white]"
@@ -227,7 +230,7 @@ def _risk_panel(stats: dict) -> Panel:
 
 def _agent_panel(stats: dict) -> Panel:
     """Render the agent activity panel."""
-    total  = stats["total"]
+    total = stats["total"]
     agents = stats["agent_counts"].most_common(10)
 
     if not agents:
@@ -294,9 +297,7 @@ def _blocked_actions_panel(stats: dict) -> Panel:
     for action, count in actions:
         bar = _bar(count, total, width=16)
         lines.append(
-            f"[red]{action:<30}[/red] "
-            f"[dim]{bar}[/dim] "
-            f"[white]{count}[/white]"
+            f"[red]{action:<30}[/red] " f"[dim]{bar}[/dim] " f"[white]{count}[/white]"
         )
 
     return Panel(
@@ -308,21 +309,21 @@ def _blocked_actions_panel(stats: dict) -> Panel:
 
 def _scenario_panel(stats: dict) -> Panel:
     """Render the scenario breakdown panel."""
-    total     = stats["total"]
+    total = stats["total"]
     scenarios = stats["scenario_counts"]
-    analyst   = stats["analyst_counts"]
+    analyst = stats["analyst_counts"]
     analyst_t = stats["analyst_total"]
 
     scenario_styles = {
         "trading_ai": "bold cyan",
-        "urban_ai":   "bold green",
-        "unknown":    "dim",
+        "urban_ai": "bold green",
+        "unknown": "dim",
     }
 
     lines = ["[bold white]Events by scenario:[/bold white]"]
     for scenario, count in scenarios.most_common():
         style = scenario_styles.get(scenario, "white")
-        bar   = _bar(count, total, width=16)
+        bar = _bar(count, total, width=16)
         lines.append(
             f"  [{style}]{scenario:<16}[/{style}] "
             f"[dim]{bar}[/dim] [white]{count}[/white]"
@@ -330,9 +331,7 @@ def _scenario_panel(stats: dict) -> Panel:
 
     if analyst_t > 0:
         lines.append("")
-        lines.append(
-            f"[bold white]Analyst decisions:[/bold white] {analyst_t} total"
-        )
+        lines.append(f"[bold white]Analyst decisions:[/bold white] {analyst_t} total")
         for decision, count in analyst.most_common():
             lines.append(f"  [yellow]{decision:<12}[/yellow] {count}")
 
@@ -369,6 +368,7 @@ def _integrity_panel(ok: bool, errors: list[str], count: int) -> Panel:
 
 # ── Click command ─────────────────────────────────────────────────────────────
 
+
 @click.command("stats")
 @click.option(
     "--log",
@@ -401,29 +401,33 @@ def stats_command(log: Path, tail: int | None) -> None:
 
     # Load the audit log
     if not log.exists():
-        console.print(Panel(
-            f"[yellow]Audit log not found at: {log}[/yellow]\n\n"
-            "[dim]Run 'aisec monitor' or 'aisec soc' first to generate data.[/dim]",
-            title="[bold]AISec Statistics[/bold]",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel(
+                f"[yellow]Audit log not found at: {log}[/yellow]\n\n"
+                "[dim]Run 'aisec monitor' or 'aisec soc' first to generate data.[/dim]",
+                title="[bold]AISec Statistics[/bold]",
+                border_style="yellow",
+            )
+        )
         return
 
-    logger  = AuditLogger(log_path=log)
+    logger = AuditLogger(log_path=log)
     entries = logger.get_all()
 
     if tail is not None:
         entries = entries[-tail:]
 
     ok, errors = logger.verify_chain()
-    count       = len(entries)
+    count = len(entries)
 
     if count == 0:
-        console.print(Panel(
-            "[yellow]Audit log is empty — no data to display.[/yellow]",
-            title="[bold]AISec Statistics[/bold]",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel(
+                "[yellow]Audit log is empty — no data to display.[/yellow]",
+                title="[bold]AISec Statistics[/bold]",
+                border_style="yellow",
+            )
+        )
         return
 
     stats = _compute_stats(entries)
@@ -436,35 +440,47 @@ def stats_command(log: Path, tail: int | None) -> None:
             style="bold cyan",
         )
     )
-    console.print(
-        Text(f"  Log: {log}", style="dim")
-    )
+    console.print(Text(f"  Log: {log}", style="dim"))
     console.print()
 
     if stats["total"] == 0:
-        console.print(Panel(
-            "[dim]No analysis events found in this log.[/dim]",
-            border_style="dim",
-        ))
+        console.print(
+            Panel(
+                "[dim]No analysis events found in this log.[/dim]",
+                border_style="dim",
+            )
+        )
         return
 
     # Row 1: Decision distribution + Risk analysis
-    console.print(Columns([
-        _decision_panel(stats),
-        _risk_panel(stats),
-    ]))
+    console.print(
+        Columns(
+            [
+                _decision_panel(stats),
+                _risk_panel(stats),
+            ]
+        )
+    )
 
     # Row 2: Agent activity + Scenario breakdown
-    console.print(Columns([
-        _agent_panel(stats),
-        _scenario_panel(stats),
-    ]))
+    console.print(
+        Columns(
+            [
+                _agent_panel(stats),
+                _scenario_panel(stats),
+            ]
+        )
+    )
 
     # Row 3: Blocked actions + Top rules
-    console.print(Columns([
-        _blocked_actions_panel(stats),
-        _rules_panel(stats),
-    ]))
+    console.print(
+        Columns(
+            [
+                _blocked_actions_panel(stats),
+                _rules_panel(stats),
+            ]
+        )
+    )
 
     # Row 4: Audit chain integrity — full width
     console.print(_integrity_panel(ok, errors, count))

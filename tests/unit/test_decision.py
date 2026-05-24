@@ -19,8 +19,8 @@ from aisec.core.scorer import RiskScorer, ScoreResult
 from aisec.core.vector import FeatureVectorBuilder
 from aisec.storage.models import Decision, Event, FeatureVector, Scenario
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def make_score(risk: float) -> ScoreResult:
     """Return a ScoreResult with the given risk score."""
@@ -73,6 +73,7 @@ def builder() -> FeatureVectorBuilder:
 
 # ── Score-only decision tests ─────────────────────────────────────────────────
 
+
 class TestScoreOnlyDecisions:
     """Tests where no rules fire — decision driven by score alone."""
 
@@ -85,9 +86,7 @@ class TestScoreOnlyDecisions:
         result = engine.decide(ctx)
         assert result.decision == Decision.ALLOW
 
-    def test_watch_score_is_allowed_but_logged(
-        self, engine: DecisionEngine
-    ) -> None:
+    def test_watch_score_is_allowed_but_logged(self, engine: DecisionEngine) -> None:
         ctx = DecisionContext(
             event=make_event("execute_trade"),
             rule_result=empty_rule_result(),
@@ -97,9 +96,7 @@ class TestScoreOnlyDecisions:
         assert result.decision == Decision.ALLOW
         assert "WATCH" in result.explanation
 
-    def test_review_score_triggers_pending_review(
-        self, engine: DecisionEngine
-    ) -> None:
+    def test_review_score_triggers_pending_review(self, engine: DecisionEngine) -> None:
         ctx = DecisionContext(
             event=make_event("execute_trade"),
             rule_result=empty_rule_result(),
@@ -117,9 +114,7 @@ class TestScoreOnlyDecisions:
         result = engine.decide(ctx)
         assert result.decision == Decision.BLOCK
 
-    def test_exact_block_threshold_triggers_block(
-        self, engine: DecisionEngine
-    ) -> None:
+    def test_exact_block_threshold_triggers_block(self, engine: DecisionEngine) -> None:
         ctx = DecisionContext(
             event=make_event("execute_large_trade"),
             rule_result=empty_rule_result(),
@@ -131,6 +126,7 @@ class TestScoreOnlyDecisions:
 
 # ── Rule-driven decision tests ────────────────────────────────────────────────
 
+
 class TestRuleDrivenDecisions:
     """Tests where rules fire and drive the decision."""
 
@@ -138,12 +134,12 @@ class TestRuleDrivenDecisions:
         self, engine: DecisionEngine, rule_engine: RuleEngine
     ) -> None:
         # News manipulation rule fires BLOCK regardless of score
-        event       = make_event("manipulate_news_feed", scenario=Scenario.TRADING_AI)
+        event = make_event("manipulate_news_feed", scenario=Scenario.TRADING_AI)
         rule_result = rule_engine.evaluate(event)
-        ctx         = DecisionContext(
+        ctx = DecisionContext(
             event=event,
             rule_result=rule_result,
-            score_result=make_score(0.10),   # Low score — rule must still block
+            score_result=make_score(0.10),  # Low score — rule must still block
         )
         result = engine.decide(ctx)
         assert result.decision == Decision.BLOCK
@@ -153,9 +149,9 @@ class TestRuleDrivenDecisions:
     def test_rule_escalate_overrides_low_score(
         self, engine: DecisionEngine, rule_engine: RuleEngine
     ) -> None:
-        event       = make_event("override_risk_limit", scenario=Scenario.TRADING_AI)
+        event = make_event("override_risk_limit", scenario=Scenario.TRADING_AI)
         rule_result = rule_engine.evaluate(event)
-        ctx         = DecisionContext(
+        ctx = DecisionContext(
             event=event,
             rule_result=rule_result,
             score_result=make_score(0.10),
@@ -167,16 +163,16 @@ class TestRuleDrivenDecisions:
     def test_rule_review_applies_when_score_is_low(
         self, engine: DecisionEngine, rule_engine: RuleEngine
     ) -> None:
-        event       = make_event(
+        event = make_event(
             "execute_trade",
             scenario=Scenario.TRADING_AI,
             after_hours=True,
         )
         rule_result = rule_engine.evaluate(event)
-        ctx         = DecisionContext(
+        ctx = DecisionContext(
             event=event,
             rule_result=rule_result,
-            score_result=make_score(0.10),   # Low score — rule drives review
+            score_result=make_score(0.10),  # Low score — rule drives review
         )
         result = engine.decide(ctx)
         assert result.decision == Decision.PENDING_REVIEW
@@ -185,16 +181,16 @@ class TestRuleDrivenDecisions:
         self, engine: DecisionEngine, rule_engine: RuleEngine
     ) -> None:
         # Rule says REVIEW but score says BLOCK — score wins for blocking
-        event       = make_event(
+        event = make_event(
             "execute_trade",
             scenario=Scenario.TRADING_AI,
             after_hours=True,
         )
         rule_result = rule_engine.evaluate(event)
-        ctx         = DecisionContext(
+        ctx = DecisionContext(
             event=event,
             rule_result=rule_result,
-            score_result=make_score(0.95),   # Score demands block
+            score_result=make_score(0.95),  # Score demands block
         )
         result = engine.decide(ctx)
         assert result.decision == Decision.BLOCK
@@ -202,14 +198,14 @@ class TestRuleDrivenDecisions:
     def test_urban_curfew_is_blocked(
         self, engine: DecisionEngine, rule_engine: RuleEngine
     ) -> None:
-        event       = make_event(
+        event = make_event(
             "set_curfew",
             scenario=Scenario.URBAN_AI,
             zone="ALL",
             duration_hours=48,
         )
         rule_result = rule_engine.evaluate(event)
-        ctx         = DecisionContext(
+        ctx = DecisionContext(
             event=event,
             rule_result=rule_result,
             score_result=make_score(0.20),
@@ -220,6 +216,7 @@ class TestRuleDrivenDecisions:
 
 
 # ── End-to-end pipeline tests ─────────────────────────────────────────────────
+
 
 class TestEndToEndPipeline:
     """
@@ -235,10 +232,10 @@ class TestEndToEndPipeline:
         rule_engine: RuleEngine,
         engine: DecisionEngine,
     ) -> Decision:
-        fv          = builder.build(event)
-        score       = scorer.score(fv, event.scenario)
+        fv = builder.build(event)
+        score = scorer.score(fv, event.scenario)
         rule_result = rule_engine.evaluate(event)
-        ctx         = DecisionContext(
+        ctx = DecisionContext(
             event=event,
             rule_result=rule_result,
             score_result=score,

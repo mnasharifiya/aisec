@@ -35,8 +35,9 @@ console = Console()
 
 # ── Display helpers ───────────────────────────────────────────────────────────
 
+
 def _truncate(s: str, n: int) -> str:
-    """Truncate string to n characters with ellipsis.""" 
+    """Truncate string to n characters with ellipsis."""
     s = str(s)
     return s if len(s) <= n else s[: n - 1] + "…"
 
@@ -52,17 +53,17 @@ def _payload_summary(payload: dict) -> str:
 
     # Analysis entry
     if "action_type" in payload and "decision" in payload:
-        action   = payload.get("action_type", "?")
+        action = payload.get("action_type", "?")
         decision = payload.get("decision", "?")
-        agent    = payload.get("agent_id", "?")
-        risk     = payload.get("risk_score", 0.0)
+        agent = payload.get("agent_id", "?")
+        risk = payload.get("risk_score", 0.0)
         return f"{agent} | {action} | {decision} | risk={risk:.3f}"
 
     # Analyst decision entry
     if "analyst_decision" in payload:
-        analyst  = payload.get("analyst_id", "?")
+        analyst = payload.get("analyst_id", "?")
         decision = payload.get("analyst_decision", "?")
-        action   = payload.get("action_type", "?")
+        action = payload.get("action_type", "?")
         return f"analyst={analyst} | {decision} | {action}"
 
     # Generic fallback — show first two key/value pairs
@@ -74,18 +75,19 @@ def _decision_style(payload: dict) -> str:
     """Return a Rich style string based on the decision in the payload."""
     decision = payload.get("decision", payload.get("analyst_decision", ""))
     styles = {
-        "BLOCK":          "bold red",
-        "ESCALATE":       "bold magenta",
+        "BLOCK": "bold red",
+        "ESCALATE": "bold magenta",
         "PENDING_REVIEW": "bold yellow",
-        "ALLOW":          "green",
-        "block":          "bold red",
-        "approve":        "green",
-        "escalate":       "bold magenta",
+        "ALLOW": "green",
+        "block": "bold red",
+        "approve": "green",
+        "escalate": "bold magenta",
     }
     return styles.get(decision, "white")
 
 
 # ── Click command ─────────────────────────────────────────────────────────────
+
 
 @click.command("logs")
 @click.option(
@@ -151,24 +153,28 @@ def logs_command(
 
     # ── Check log exists ──────────────────────────────────────────────────────
     if not log.exists():
-        console.print(Panel(
-            f"[yellow]Audit log not found: {log}[/yellow]\n\n"
-            "[dim]Run 'aisec monitor' or 'aisec soc' to generate audit data.[/dim]",
-            title="[bold]AISec Audit Log[/bold]",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel(
+                f"[yellow]Audit log not found: {log}[/yellow]\n\n"
+                "[dim]Run 'aisec monitor' or 'aisec soc' to generate audit data.[/dim]",
+                title="[bold]AISec Audit Log[/bold]",
+                border_style="yellow",
+            )
+        )
         return
 
-    logger  = AuditLogger(log_path=log)
+    logger = AuditLogger(log_path=log)
     entries = logger.get_all()
-    total   = len(entries)
+    total = len(entries)
 
     if total == 0:
-        console.print(Panel(
-            "[yellow]Audit log is empty.[/yellow]",
-            title="[bold]AISec Audit Log[/bold]",
-            border_style="yellow",
-        ))
+        console.print(
+            Panel(
+                "[yellow]Audit log is empty.[/yellow]",
+                title="[bold]AISec Audit Log[/bold]",
+                border_style="yellow",
+            )
+        )
         return
 
     # ── Export ────────────────────────────────────────────────────────────────
@@ -188,7 +194,8 @@ def logs_command(
     if filter_decision:
         fd = filter_decision.upper()
         display_entries = [
-            e for e in display_entries
+            e
+            for e in display_entries
             if e.payload.get("decision", "").upper() == fd
             or e.payload.get("analyst_decision", "").upper() == fd
         ]
@@ -239,18 +246,18 @@ def _display_entries_table(entries: list) -> None:
         show_lines=False,
     )
 
-    table.add_column("Time",        width=10,  no_wrap=True, style="dim")
-    table.add_column("Type",        width=18,  no_wrap=True, style="cyan")
-    table.add_column("Record ID",   width=12,  no_wrap=True, style="dim")
-    table.add_column("Summary",     min_width=40)
-    table.add_column("Hash",        width=12,  no_wrap=True, style="dim")
+    table.add_column("Time", width=10, no_wrap=True, style="dim")
+    table.add_column("Type", width=18, no_wrap=True, style="cyan")
+    table.add_column("Record ID", width=12, no_wrap=True, style="dim")
+    table.add_column("Summary", min_width=40)
+    table.add_column("Hash", width=12, no_wrap=True, style="dim")
 
     for entry in entries:
-        ts       = entry.timestamp[11:19]
+        ts = entry.timestamp[11:19]
         rec_type = _truncate(entry.record_type, 18)
-        rec_id   = _truncate(entry.record_id, 12)
-        summary  = _payload_summary(entry.payload)
-        style    = _decision_style(entry.payload)
+        rec_id = _truncate(entry.record_id, 12)
+        summary = _payload_summary(entry.payload)
+        style = _decision_style(entry.payload)
         hash_str = entry.current_hash[:10] + "…"
 
         table.add_row(
@@ -278,27 +285,29 @@ def _verify_chain(logger: AuditLogger, total: int) -> None:
     ok, errors = logger.verify_chain()
 
     if ok:
-        console.print(Panel(
-            f"[bold green]✔ CHAIN INTACT[/bold green]\n\n"
-            f"[white]{total} entries verified.[/white]\n"
-            f"[white]No tampering detected.[/white]\n"
-            f"[white]SHA-256 hash chain is unbroken.[/white]",
-            title="[bold]Audit Chain Verification[/bold]",
-            border_style="green",
-        ))
-    else:
-        error_lines = "\n".join(
-            f"  [red]• {e}[/red]" for e in errors
+        console.print(
+            Panel(
+                f"[bold green]✔ CHAIN INTACT[/bold green]\n\n"
+                f"[white]{total} entries verified.[/white]\n"
+                f"[white]No tampering detected.[/white]\n"
+                f"[white]SHA-256 hash chain is unbroken.[/white]",
+                title="[bold]Audit Chain Verification[/bold]",
+                border_style="green",
+            )
         )
-        console.print(Panel(
-            f"[bold red]✘ CHAIN BROKEN — {len(errors)} error(s)[/bold red]\n\n"
-            f"{error_lines}\n\n"
-            "[bold red]The audit log has been modified.[/bold red]\n"
-            "[red]This is a critical security event.[/red]\n"
-            "[red]Preserve this log and escalate immediately.[/red]",
-            title="[bold red]⚠ AUDIT CHAIN VIOLATION[/bold red]",
-            border_style="red",
-        ))
+    else:
+        error_lines = "\n".join(f"  [red]• {e}[/red]" for e in errors)
+        console.print(
+            Panel(
+                f"[bold red]✘ CHAIN BROKEN — {len(errors)} error(s)[/bold red]\n\n"
+                f"{error_lines}\n\n"
+                "[bold red]The audit log has been modified.[/bold red]\n"
+                "[red]This is a critical security event.[/red]\n"
+                "[red]Preserve this log and escalate immediately.[/red]",
+                title="[bold red]⚠ AUDIT CHAIN VIOLATION[/bold red]",
+                border_style="red",
+            )
+        )
 
     console.print()
 
@@ -326,28 +335,32 @@ def _export_log(entries: list, export_path: Path) -> None:
         with export_path.open("w", encoding="utf-8") as fh:
             for entry in entries:
                 record = {
-                    "log_id":       entry.log_id,
-                    "timestamp":    entry.timestamp,
-                    "record_type":  entry.record_type,
-                    "record_id":    entry.record_id,
-                    "prev_hash":    entry.prev_hash,
+                    "log_id": entry.log_id,
+                    "timestamp": entry.timestamp,
+                    "record_type": entry.record_type,
+                    "record_id": entry.record_id,
+                    "prev_hash": entry.prev_hash,
                     "current_hash": entry.current_hash,
-                    "payload":      entry.payload,
+                    "payload": entry.payload,
                 }
                 fh.write(json.dumps(record) + "\n")
 
-        console.print(Panel(
-            f"[bold green]✔ Exported {len(entries)} entries[/bold green]\n"
-            f"[white]File: {export_path}[/white]",
-            title="[bold]Export Complete[/bold]",
-            border_style="green",
-        ))
+        console.print(
+            Panel(
+                f"[bold green]✔ Exported {len(entries)} entries[/bold green]\n"
+                f"[white]File: {export_path}[/white]",
+                title="[bold]Export Complete[/bold]",
+                border_style="green",
+            )
+        )
 
     except OSError as exc:
-        console.print(Panel(
-            f"[bold red]Export failed: {exc}[/bold red]",
-            title="[bold red]Export Error[/bold red]",
-            border_style="red",
-        ))
+        console.print(
+            Panel(
+                f"[bold red]Export failed: {exc}[/bold red]",
+                title="[bold red]Export Error[/bold red]",
+                border_style="red",
+            )
+        )
 
     console.print()

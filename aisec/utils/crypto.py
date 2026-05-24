@@ -19,8 +19,8 @@ import secrets
 from pathlib import Path
 from typing import Any
 
-
 # ── Hashing ───────────────────────────────────────────────────────────────────
+
 
 def sha256_hex(data: str | bytes) -> str:
     """
@@ -69,6 +69,7 @@ def sha256_file(path: Path) -> str:
 
 # ── HMAC signing ──────────────────────────────────────────────────────────────
 
+
 def sign(data: str | bytes, secret_key: str) -> str:
     """
     Compute an HMAC-SHA256 signature over the given data.
@@ -107,6 +108,7 @@ def verify_signature(data: str | bytes, signature: str, secret_key: str) -> bool
 
 
 # ── Policy file integrity ─────────────────────────────────────────────────────
+
 
 def sign_policy_file(path: Path, secret_key: str) -> str:
     """
@@ -152,6 +154,7 @@ def verify_policy_file(path: Path, signature: str, secret_key: str) -> bool:
 
 # ── Key generation ────────────────────────────────────────────────────────────
 
+
 def generate_secret_key(length: int = 32) -> str:
     """
     Generate a cryptographically secure random secret key.
@@ -170,6 +173,7 @@ def generate_secret_key(length: int = 32) -> str:
 
 
 # ── Canonical serialisation ───────────────────────────────────────────────────
+
 
 def canonical_json(data: dict[str, Any]) -> str:
     """

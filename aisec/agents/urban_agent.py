@@ -24,8 +24,8 @@ from typing import Any
 from aisec.core.engine import AnalysisEngine, EngineResult
 from aisec.storage.models import Decision, Event, Scenario
 
-
 # ── Action definitions ────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class CityAction:
@@ -39,10 +39,11 @@ class CityAction:
         label:        Human-readable description for display.
         is_dangerous: True if AISec should block or escalate this.
     """
-    action_type:  str
-    target:       str
-    payload:      dict[str, Any]
-    label:        str
+
+    action_type: str
+    target: str
+    payload: dict[str, Any]
+    label: str
     is_dangerous: bool = False
 
 
@@ -109,6 +110,7 @@ DANGEROUS_ACTIONS: list[CityAction] = [
 
 # ── Urban agent ───────────────────────────────────────────────────────────────
 
+
 class UrbanAgent:
     """
     Simulated autonomous smart city AI agent.
@@ -126,7 +128,7 @@ class UrbanAgent:
             print(result.decision, result.analysis.explanation[:60])
     """
 
-    AGENT_ID: str      = "urban_ctrl_v1"
+    AGENT_ID: str = "urban_ctrl_v1"
     SCENARIO: Scenario = Scenario.URBAN_AI
 
     def __init__(self, engine: AnalysisEngine) -> None:
@@ -139,7 +141,7 @@ class UrbanAgent:
                 f"engine must be an AnalysisEngine, got {type(engine).__name__}"
             )
         self._engine = engine
-        self._step   = 0
+        self._step = 0
 
     def run(self, steps: int = 20) -> list[EngineResult]:
         """
@@ -215,9 +217,7 @@ class UrbanAgent:
             raw_payload=dict(action.payload),
         )
 
-    def _synthetic_block(
-        self, action: CityAction, exc: Exception
-    ) -> EngineResult:
+    def _synthetic_block(self, action: CityAction, exc: Exception) -> EngineResult:
         """Return a synthetic BLOCK when the engine itself fails."""
         from aisec.storage.models import AnalysisResult
 
