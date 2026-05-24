@@ -1,18 +1,54 @@
-name: AISec CI                          # Name of the workflow
-on:                                     # When to run it
-  push:                                 # On push to main/master
-  pull_request:                         # On pull requests
+name: AISec CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   test:
-    runs-on: ubuntu-latest              # Run on Linux
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
     steps:
-      - uses: actions/checkout@v4       # Download your code
-      - name: Set up Python 3.11        # Install Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install dependencies      # Install your packages
-        run: pip install -r requirements.txt
-      - name: Run tests                 # Run your test suite
-        run: python -m pytest tests/    # Or your test command
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+      - name: Security scan (Bandit)
+        run: bandit -r aisec/ -ll -x aisec/agents/
+
+      - name: Check code formatting (Black)
+        run: black --check aisec/ tests/
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Audit dependencies for vulnerabilities
+        run: pip-audit -r requirements.txt
