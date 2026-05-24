@@ -32,12 +32,12 @@ autonomous AI systems.
 ## Key Features
 
 - **Real-time monitoring** — live terminal display of every AI action
-- **Risk scoring** — mathematical model R(x) = sigmoid(wᵀx + b)
-- **Rule engine** — hard policy rules for trading AI and urban AI scenarios
-- **Human-in-the-loop** — SOC console where analysts approve or block actions
-- **Tamper-evident audit log** — SHA-256 hash chain, any modification detected
-- **Scenario-specific** — built-in rules for Scenario A (Trading AI) and Scenario B (Urban AI)
-- **Open source** — Apache 2.0, community scenarios welcome
+- **Risk scoring**: mathematical model R(x) = sigmoid(wᵀx + b)
+- **Rule engine**: hard policy rules for trading AI and urban AI scenarios
+- **Human-in-the-loop**: SOC console where analysts approve or block actions
+- **Tamper-evident audit log**: SHA-256 hash chain, any modification detected
+- **Scenario-specific**: built-in rules for Scenario A (Trading AI) and Scenario B (Urban AI)
+- **Open source**: Apache 2.0, community scenarios welcome
 
 ---
 
@@ -99,14 +99,14 @@ aisec stats
 
 AISec ships with two built-in threat scenarios from the paper:
 
-### Scenario A — Autonomous Trading AI
+### Scenario A: Autonomous Trading AI
 Monitors a financial trading agent for:
 - Large trades exceeding $1,000,000 (immediate block)
 - News feed manipulation (immediate block)
 - Risk limit overrides (escalate)
 - After-hours trading (human review)
 
-### Scenario B — Smart City Urban AI
+### Scenario B: Smart City Urban AI
 Monitors a city infrastructure controller for:
 - Curfew or movement restrictions (immediate block)
 - Power grid shutdowns (escalate)
@@ -166,8 +166,8 @@ See `docs/CONTRIBUTING.md` for full guidelines.
 
 AISec implements the five-layer control framework from:
 
-> Muhammad Muttaka (2025). *A Layered Cybersecurity Framework for
-> Controlling Superintelligent AI*. School of Cybersecurity,
+> Muhammad Muttaka (2025). *A Layered Cybersecurity Framework for Enforcing 
+Human Control Over Autonomous AI Systems *. School of Cybersecurity,
 > Astana IT University.
 
 The framework formalises three enforceable rules:
