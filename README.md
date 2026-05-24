@@ -9,7 +9,8 @@
 > and preserves tamper-evident audit trails.
 
 Built on the research framework published in:
-**"A Layered Cybersecurity Framework for Controlling Superintelligent AI"**
+**"A Layered Cybersecurity Framework for Enforcing 
+Human Control Over Autonomous AI Systems "**
 — Muhammad Muttaka, Astana IT University, 2025.
 
 ---
