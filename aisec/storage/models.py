@@ -104,23 +104,15 @@ class Event:
             raise ValueError("agent_id cannot be empty")
         if not self.target:
             raise ValueError("target cannot be empty")
+        # Freeze payload copies to prevent post-construction mutation.
+        # This ensures the audit log always reflects what was analysed.
+        object.__setattr__(self, "raw_payload", dict(self.raw_payload))
+        object.__setattr__(self, "metadata",    dict(self.metadata))
 
 
 @dataclass
 class FeatureVector:
-    """
-    Numerical encoding of an Event for risk scoring.
-
-    Dimensions (in order):
-        0  action_type_encoding   — mapped from action type string
-        1  keyword_risk_score     — presence of dangerous keywords
-        2  frequency_score        — burst rate of similar actions
-        3  api_call_flag          — 1.0 if action calls external API
-        4  file_access_flag       — 1.0 if action touches filesystem
-        5  network_access_flag    — 1.0 if action uses network
-        6  sensitive_path_flag    — 1.0 if target is a sensitive resource
-        7  privilege_flag         — 1.0 if action requires elevated rights
-    """
+    """Numerical encoding of an Event for risk scoring."""
     event_id:   str
     vector:     list[float]
     dimensions: list[str] = field(default_factory=lambda: [
@@ -148,19 +140,14 @@ class FeatureVector:
 
 @dataclass
 class AnalysisResult:
-    """
-    Output of the analysis engine for a single Event.
-
-    Contains the risk score, which rules fired, similarity
-    to baseline behavior, and the final enforcement decision.
-    """
+    """Output of the analysis engine for a single Event."""
     event_id:           str
-    risk_score:         float           # 0.0 (safe) to 1.0 (critical)
+    risk_score:         float
     decision:           Decision
     explanation:        str
     rule_hits:          list[str]       = field(default_factory=list)
-    baseline_similarity: float          = 1.0   # 1.0 = normal, 0.0 = anomalous
-    risk_delta:         float           = 0.0   # change vs previous event
+    baseline_similarity: float          = 1.0
+    risk_delta:         float           = 0.0
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.risk_score <= 1.0:
@@ -173,20 +160,14 @@ class AnalysisResult:
 
 @dataclass
 class Alert:
-    """
-    A human-reviewable notification raised for a suspicious event.
-
-    Alerts are the primary unit of work in the SOC queue.
-    """
+    """A human-reviewable notification raised for a suspicious event."""
     event_id:          str
     severity:          Severity
     reason:            str
 
-    # Optional
     assigned_to:       str | None            = None
     delivery_channels: list[str]             = field(default_factory=lambda: ["cli"])
 
-    # Auto-generated
     alert_id:   str         = field(default_factory=_new_id)
     status:     AlertStatus = AlertStatus.NEW
     created_at: str         = field(default_factory=_now_utc)
@@ -194,27 +175,19 @@ class Alert:
 
 @dataclass
 class Incident:
-    """
-    A grouped collection of related alerts representing a security event.
-
-    Multiple alerts from the same agent or attack pattern
-    can be linked to a single incident for unified tracking.
-    """
+    """A grouped collection of related alerts representing a security event."""
     title:             str
     severity:          Severity
     related_event_ids: list[str] = field(default_factory=list)
 
-    # Optional
     resolution: str | None = None
 
-    # Auto-generated
     incident_id: str            = field(default_factory=_new_id)
     status:      IncidentStatus = IncidentStatus.NEW
     created_at:  str            = field(default_factory=_now_utc)
     updated_at:  str            = field(default_factory=_now_utc)
 
     def update(self, status: IncidentStatus, resolution: str | None = None) -> None:
-        """Update incident status and optionally set resolution."""
         self.status     = status
         self.updated_at = _now_utc()
         if resolution:
@@ -223,35 +196,21 @@ class Incident:
 
 @dataclass
 class AuditLogEntry:
-    """
-    A single tamper-evident entry in the hash-chained audit log.
-
-    Each entry includes the SHA-256 hash of the previous entry,
-    forming a chain. Any modification to any entry breaks the chain
-    and is immediately detectable by verify_chain().
-    """
-    record_type: str            # "event", "decision", "alert", "analyst_action"
+    """A single tamper-evident entry in the hash-chained audit log."""
+    record_type: str
     record_id:   str
     payload:     dict[str, Any]
-    prev_hash:   str            # SHA-256 of previous entry, "0" for genesis
+    prev_hash:   str
 
-    # Auto-generated
     log_id:       str = field(default_factory=_new_id)
     timestamp:    str = field(default_factory=_now_utc)
     current_hash: str = field(default="")
 
     def __post_init__(self) -> None:
-        """Compute and store the hash of this entry on creation."""
         if not self.current_hash:
             self.current_hash = self._compute_hash()
 
     def _compute_hash(self) -> str:
-        """
-        Compute SHA-256 over the deterministic content of this entry.
-
-        Note: current_hash is excluded from the digest to avoid
-        circular dependency.
-        """
         content = (
             f"{self.log_id}"
             f"{self.timestamp}"
@@ -263,13 +222,6 @@ class AuditLogEntry:
         return hashlib.sha256(content.encode()).hexdigest()
 
     def verify(self, expected_prev_hash: str) -> bool:
-        """
-        Verify this entry has not been tampered with.
-
-        Recomputes the hash and checks:
-          1. The recomputed hash matches current_hash (content integrity).
-          2. prev_hash matches the expected value (chain continuity).
-        """
         recomputed = self._compute_hash()
         return (
             recomputed == self.current_hash

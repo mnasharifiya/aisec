@@ -297,7 +297,7 @@ def _build_action_sequence(
     Returns a list of (agent_name, action) tuples.
     For 'both', actions alternate between trading and urban.
     """
-    import random
+    import random   # Non-cryptographic — simulation only, not security-sensitive
 
     sequence = []
 

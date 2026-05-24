@@ -43,6 +43,33 @@ class AuditLogger:
         self._path = log_path
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._last_hash: str = self._load_last_hash()
+        self._warn_if_insecure()
+
+    def _warn_if_insecure(self) -> None:
+        """
+        Warn if the audit log directory may be accessible to other users.
+
+        Full permission enforcement on Windows requires win32security.
+        This warning is the minimum viable security notification.
+        """
+        import os
+        import sys
+        if sys.platform != "win32":
+            try:
+                mode = oct(os.stat(self._path.parent).st_mode)[-3:]
+                # mode is a string like '700' or '755'; check 'others' permission bit
+                if mode[2] != "0":
+                    import warnings
+                    warnings.warn(
+                        f"Audit log directory {self._path.parent} may be "
+                        f"readable by other users (permissions: {mode}). "
+                        "Consider: chmod 700 .aisec/",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+            except OSError:
+                # If we cannot stat the directory, silently ignore the warning.
+                pass
 
     # ── Public API ────────────────────────────────────────────────────────────
 

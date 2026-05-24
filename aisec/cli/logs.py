@@ -36,7 +36,7 @@ console = Console()
 # ── Display helpers ───────────────────────────────────────────────────────────
 
 def _truncate(s: str, n: int) -> str:
-    """Truncate string to n characters with ellipsis."""
+    """Truncate string to n characters with ellipsis.""" 
     s = str(s)
     return s if len(s) <= n else s[: n - 1] + "…"
 
@@ -305,6 +305,22 @@ def _verify_chain(logger: AuditLogger, total: int) -> None:
 
 def _export_log(entries: list, export_path: Path) -> None:
     """Export all audit log entries to a JSONL file."""
+    # Warn before overwriting an existing file
+    if export_path.exists():
+        console.print(
+            Text(
+                f"  ⚠ File already exists: {export_path}",
+                style="yellow",
+            )
+        )
+        try:
+            confirm = input("  Overwrite? (yes/no): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            console.print(Text("  Export cancelled.", style="dim"))
+            return
+        if confirm != "yes":
+            console.print(Text("  Export cancelled.", style="dim"))
+            return
     try:
         export_path.parent.mkdir(parents=True, exist_ok=True)
         with export_path.open("w", encoding="utf-8") as fh:

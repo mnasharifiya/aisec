@@ -47,6 +47,14 @@ from aisec.storage.models import Decision
 
 console = Console()
 
+# Rate limiting imports and state
+import time as _time
+
+# Minimum seconds between irreversible analyst decisions.
+# Prevents automated approval of events faster than human review.
+_MIN_DECISION_INTERVAL: float = 1.0
+_last_decision_time: float = 0.0
+
 # ── SOC queue ─────────────────────────────────────────────────────────────────
 
 class SOCQueue:
@@ -123,6 +131,14 @@ class SOCQueue:
 
     def resolved_count(self) -> int:
         return len(self._resolved)
+
+    def verify_chain(self) -> tuple[bool, list[str]]:
+        """Verify the audit log hash chain integrity."""
+        return self._logger.verify_chain()
+
+    def get_last_entries(self, n: int = 10) -> list:
+        """Return the last n audit log entries."""
+        return self._logger.get_last(max(1, min(n, 100)))
 
     def stats(self) -> dict[str, int]:
         """Return counts of each analyst decision type."""
@@ -311,6 +327,30 @@ def _confirm_action(action_name: str, event_num: int) -> bool:
     return False
 
 
+def _check_rate_limit() -> bool:
+    """
+    Enforce minimum time between analyst decisions.
+
+    Returns True if the decision is allowed, False if too fast.
+    This prevents automated scripts from approving events
+    faster than a human could reasonably review them.
+    """
+    global _last_decision_time
+    now     = _time.monotonic()
+    elapsed = now - _last_decision_time
+    if elapsed < _MIN_DECISION_INTERVAL:
+        remaining = _MIN_DECISION_INTERVAL - elapsed
+        console.print(
+            Text(
+                f"  ⚠ Decision rate limit — wait {remaining:.1f}s.",
+                style="yellow",
+            )
+        )
+        return False
+    _last_decision_time = now
+    return True
+
+
 # ── SOC session ───────────────────────────────────────────────────────────────
 
 def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
@@ -373,6 +413,8 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
         elif cmd == "approve":
             idx = _parse_index(parts, queue)
             if idx is not None:
+                if not _check_rate_limit():
+                    continue
                 result = queue.pending()[idx]
                 _print_event_detail(result, idx + 1)
                 if _confirm_action("approve", idx + 1):
@@ -386,6 +428,8 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
         elif cmd == "block":
             idx = _parse_index(parts, queue)
             if idx is not None:
+                if not _check_rate_limit():
+                    continue
                 result = queue.pending()[idx]
                 _print_event_detail(result, idx + 1)
                 if _confirm_action("block", idx + 1):
@@ -399,6 +443,8 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
         elif cmd == "escalate":
             idx = _parse_index(parts, queue)
             if idx is not None:
+                if not _check_rate_limit():
+                    continue
                 result = queue.pending()[idx]
                 _print_event_detail(result, idx + 1)
                 if _confirm_action("escalate", idx + 1):
@@ -417,8 +463,8 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
         elif cmd == "verify":
             console.print()
             console.print(Text("  Verifying audit chain...", style="dim"))
-            # Access the logger through the queue
-            ok, errors = queue._logger.verify_chain()
+            # Use the public wrapper on SOCQueue instead of accessing private logger
+            ok, errors = queue.verify_chain()
             if ok:
                 console.print(
                     Text("  ✔ Audit chain INTACT — no tampering detected.",
@@ -440,7 +486,8 @@ def _run_soc_session(queue: SOCQueue, analyst_id: str) -> None:
                     n = max(1, min(int(parts[1]), 100))
                 except ValueError:
                     pass
-            entries = queue._logger.get_last(n)
+            # Use the public wrapper on SOCQueue instead of accessing private logger
+            entries = queue.get_last_entries(n)
             console.print()
             console.print(
                 Text(f"  Last {len(entries)} audit log entries:", style="dim")
@@ -504,7 +551,7 @@ def soc_command(analyst: str, scenario: str, steps: int) -> None:
     """
     # Sanitise analyst ID — only allow safe characters
     analyst = "".join(c for c in analyst if c.isalnum() or c in "-_")[:32]
-    if not analyst:
+    if len(analyst) < 3:
         analyst = "analyst_01"
 
     log_path = Path(".aisec") / "soc_session.jsonl"
@@ -519,7 +566,7 @@ def soc_command(analyst: str, scenario: str, steps: int) -> None:
     )
 
     # Run simulation and collect flagged events
-    import random
+    import random   # Non-cryptographic — simulation only, not security-sensitive
 
     trading_pool = TRADING_SAFE * 2 + TRADING_DANGEROUS
     urban_pool   = URBAN_SAFE   * 3 + URBAN_DANGEROUS
