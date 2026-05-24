@@ -18,12 +18,12 @@ Muhammad Muttaka, Astana IT University, 2025.
 ## What Is AISec?
 
 Autonomous AI agents: trading bots, smart city controllers, autonomous
-drones — can cause serious harm when they act without human oversight.
+drones, can cause serious harm when they act without human oversight.
 AISec is a security layer that sits between an AI agent and the systems
 it controls, intercepting every action, scoring it for risk, and blocking
 dangerous behaviour before it executes.
 
-Think of it as **Nmap for AI behaviour** — a professional CLI security
+Think of it as **Nmap for AI behaviour**; a professional CLI security
 tool designed for security operations centres (SOC) working with
 autonomous AI systems.
 
@@ -31,7 +31,7 @@ autonomous AI systems.
 
 ## Key Features
 
-- **Real-time monitoring** — live terminal display of every AI action
+- **Real-time monitoring**: live terminal display of every AI action
 - **Risk scoring**: mathematical model R(x) = sigmoid(wᵀx + b)
 - **Rule engine**: hard policy rules for trading AI and urban AI scenarios
 - **Human-in-the-loop**: SOC console where analysts approve or block actions
