@@ -27,8 +27,8 @@ import sys
 from datetime import datetime, timezone
 from typing import Any
 
-
 # ── JSON formatter ────────────────────────────────────────────────────────────
+
 
 class JSONFormatter(logging.Formatter):
     """
@@ -49,37 +49,44 @@ class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Format a LogRecord as a JSON line."""
         entry: dict[str, Any] = {
-            "ts":        datetime.now(timezone.utc).isoformat(),
-            "level":     record.levelname,
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": record.levelname,
             "component": record.name,
-            "msg":       record.getMessage(),
+            "msg": record.getMessage(),
         }
 
         # Include any extra fields passed via the extra= parameter
         # or as keyword arguments through our structured helper
         for key, value in record.__dict__.items():
             if key.startswith("_aisec_"):
-                clean_key = key[7:]   # Strip the _aisec_ prefix
+                clean_key = key[7:]  # Strip the _aisec_ prefix
                 entry[clean_key] = value
 
         # Include exception info if present
         if record.exc_info:
-            entry["exc_type"]    = record.exc_info[0].__name__ if record.exc_info[0] else None
-            entry["exc_message"] = str(record.exc_info[1]) if record.exc_info[1] else None
+            entry["exc_type"] = (
+                record.exc_info[0].__name__ if record.exc_info[0] else None
+            )
+            entry["exc_message"] = (
+                str(record.exc_info[1]) if record.exc_info[1] else None
+            )
 
         try:
             return json.dumps(entry, default=str, separators=(",", ":"))
         except (TypeError, ValueError):
             # Fallback — never let the logger itself crash
-            return json.dumps({
-                "ts":        entry["ts"],
-                "level":     "ERROR",
-                "component": "aisec.logger",
-                "msg":       "Failed to serialize log entry",
-            })
+            return json.dumps(
+                {
+                    "ts": entry["ts"],
+                    "level": "ERROR",
+                    "component": "aisec.logger",
+                    "msg": "Failed to serialize log entry",
+                }
+            )
 
 
 # ── Structured logger wrapper ─────────────────────────────────────────────────
+
 
 class StructuredLogger:
     """
@@ -148,9 +155,7 @@ def configure_logging(
     root = logging.getLogger("aisec")
     root.setLevel(getattr(logging, level.upper(), logging.INFO))
 
-    handler = logging.StreamHandler(
-        sys.stdout if output == "stdout" else sys.stderr
-    )
+    handler = logging.StreamHandler(sys.stdout if output == "stdout" else sys.stderr)
     handler.setFormatter(JSONFormatter())
     root.addHandler(handler)
 
