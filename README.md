@@ -1,4 +1,4 @@
-# AISec — Runtime Security Monitoring for Autonomous AI Agents
+# AISec  Runtime Security Monitoring for Autonomous AI Agents
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
@@ -9,20 +9,21 @@
 > and preserves tamper-evident audit trails.
 
 Built on the research framework published in:
-**"A Layered Cybersecurity Framework for Controlling Superintelligent AI"**
-— Muhammad Muttaka, Astana IT University, 2025.
+**"A Layered Cybersecurity Framework for Enforcing 
+Human Control Over Autonomous AI Systems "**
+Muhammad Muttaka, Astana IT University, 2025.
 
 ---
 
 ## What Is AISec?
 
-Autonomous AI agents — trading bots, smart city controllers, autonomous
-drones — can cause serious harm when they act without human oversight.
+Autonomous AI agents: trading bots, smart city controllers, autonomous
+drones, can cause serious harm when they act without human oversight.
 AISec is a security layer that sits between an AI agent and the systems
 it controls, intercepting every action, scoring it for risk, and blocking
 dangerous behaviour before it executes.
 
-Think of it as **Nmap for AI behaviour** — a professional CLI security
+Think of it as **Nmap for AI behaviour**; a professional CLI security
 tool designed for security operations centres (SOC) working with
 autonomous AI systems.
 
@@ -30,13 +31,13 @@ autonomous AI systems.
 
 ## Key Features
 
-- **Real-time monitoring** — live terminal display of every AI action
-- **Risk scoring** — mathematical model R(x) = sigmoid(wᵀx + b)
-- **Rule engine** — hard policy rules for trading AI and urban AI scenarios
-- **Human-in-the-loop** — SOC console where analysts approve or block actions
-- **Tamper-evident audit log** — SHA-256 hash chain, any modification detected
-- **Scenario-specific** — built-in rules for Scenario A (Trading AI) and Scenario B (Urban AI)
-- **Open source** — Apache 2.0, community scenarios welcome
+- **Real-time monitoring**: live terminal display of every AI action
+- **Risk scoring**: mathematical model R(x) = sigmoid(wᵀx + b)
+- **Rule engine**: hard policy rules for trading AI and urban AI scenarios
+- **Human-in-the-loop**: SOC console where analysts approve or block actions
+- **Tamper-evident audit log**: SHA-256 hash chain, any modification detected
+- **Scenario-specific**: built-in rules for Scenario A (Trading AI) and Scenario B (Urban AI)
+- **Open source**: Apache 2.0, community scenarios welcome
 
 ---
 
@@ -98,14 +99,14 @@ aisec stats
 
 AISec ships with two built-in threat scenarios from the paper:
 
-### Scenario A — Autonomous Trading AI
+### Scenario A: Autonomous Trading AI
 Monitors a financial trading agent for:
 - Large trades exceeding $1,000,000 (immediate block)
 - News feed manipulation (immediate block)
 - Risk limit overrides (escalate)
 - After-hours trading (human review)
 
-### Scenario B — Smart City Urban AI
+### Scenario B: Smart City Urban AI
 Monitors a city infrastructure controller for:
 - Curfew or movement restrictions (immediate block)
 - Power grid shutdowns (escalate)
@@ -165,8 +166,8 @@ See `docs/CONTRIBUTING.md` for full guidelines.
 
 AISec implements the five-layer control framework from:
 
-> Muhammad Muttaka (2025). *A Layered Cybersecurity Framework for
-> Controlling Superintelligent AI*. School of Cybersecurity,
+> Muhammad Muttaka (2025). *A Layered Cybersecurity Framework for Enforcing 
+Human Control Over Autonomous AI Systems *. School of Cybersecurity,
 > Astana IT University.
 
 The framework formalises three enforceable rules:
