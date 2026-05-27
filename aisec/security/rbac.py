@@ -40,8 +40,8 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import FrozenSet
 
-
 # ── Permissions ───────────────────────────────────────────────────────────────
+
 
 class Permission(Enum):
     """
@@ -52,33 +52,35 @@ class Permission(Enum):
     """
 
     # ── Analyst permissions ───────────────────────────────────────────────────
-    VIEW_QUEUE          = auto()   # View the SOC review queue
-    VIEW_EVENT_DETAIL   = auto()   # View full details of a queued event
-    VIEW_AUDIT_LOG      = auto()   # Read the audit log entries
-    VIEW_STATS          = auto()   # View security statistics dashboard
+    VIEW_QUEUE = auto()  # View the SOC review queue
+    VIEW_EVENT_DETAIL = auto()  # View full details of a queued event
+    VIEW_AUDIT_LOG = auto()  # Read the audit log entries
+    VIEW_STATS = auto()  # View security statistics dashboard
 
-    APPROVE_EVENT       = auto()   # Approve a PENDING_REVIEW event
-    BLOCK_EVENT         = auto()   # Block a PENDING_REVIEW event
-    ESCALATE_EVENT      = auto()   # Escalate an event to senior analyst
+    APPROVE_EVENT = auto()  # Approve a PENDING_REVIEW event
+    BLOCK_EVENT = auto()  # Block a PENDING_REVIEW event
+    ESCALATE_EVENT = auto()  # Escalate an event to senior analyst
 
-    VERIFY_AUDIT_CHAIN  = auto()   # Run hash chain verification
+    VERIFY_AUDIT_CHAIN = auto()  # Run hash chain verification
 
     # ── Admin-only permissions ────────────────────────────────────────────────
-    EXPORT_AUDIT_LOG    = auto()   # Export audit log to file
-    VIEW_ALL_SESSIONS   = auto()   # View all active analyst sessions
-    MANAGE_ROLES        = auto()   # Assign roles to analysts
-    MODIFY_THRESHOLDS   = auto()   # Change risk score thresholds
-    MODIFY_RULES        = auto()   # Add or disable policy rules
-    CLEAR_QUEUE         = auto()   # Clear all pending events from queue
-    VIEW_SYSTEM_CONFIG  = auto()   # View system configuration
+    EXPORT_AUDIT_LOG = auto()  # Export audit log to file
+    VIEW_ALL_SESSIONS = auto()  # View all active analyst sessions
+    MANAGE_ROLES = auto()  # Assign roles to analysts
+    MODIFY_THRESHOLDS = auto()  # Change risk score thresholds
+    MODIFY_RULES = auto()  # Add or disable policy rules
+    CLEAR_QUEUE = auto()  # Clear all pending events from queue
+    VIEW_SYSTEM_CONFIG = auto()  # View system configuration
 
 
 # ── Role definitions ──────────────────────────────────────────────────────────
 
+
 class Role(str, Enum):
     """AISec role identifiers."""
+
     ANALYST = "analyst"
-    ADMIN   = "admin"
+    ADMIN = "admin"
 
 
 # Role → permission mapping
@@ -86,41 +88,44 @@ class Role(str, Enum):
 # Changing a role's permissions here changes it everywhere in the system.
 
 ROLE_PERMISSIONS: dict[Role, FrozenSet[Permission]] = {
-
-    Role.ANALYST: frozenset({
-        Permission.VIEW_QUEUE,
-        Permission.VIEW_EVENT_DETAIL,
-        Permission.VIEW_AUDIT_LOG,
-        Permission.VIEW_STATS,
-        Permission.APPROVE_EVENT,
-        Permission.BLOCK_EVENT,
-        Permission.ESCALATE_EVENT,
-        Permission.VERIFY_AUDIT_CHAIN,
-    }),
-
-    Role.ADMIN: frozenset({
-        # Admin has all analyst permissions
-        Permission.VIEW_QUEUE,
-        Permission.VIEW_EVENT_DETAIL,
-        Permission.VIEW_AUDIT_LOG,
-        Permission.VIEW_STATS,
-        Permission.APPROVE_EVENT,
-        Permission.BLOCK_EVENT,
-        Permission.ESCALATE_EVENT,
-        Permission.VERIFY_AUDIT_CHAIN,
-        # Plus admin-only permissions
-        Permission.EXPORT_AUDIT_LOG,
-        Permission.VIEW_ALL_SESSIONS,
-        Permission.MANAGE_ROLES,
-        Permission.MODIFY_THRESHOLDS,
-        Permission.MODIFY_RULES,
-        Permission.CLEAR_QUEUE,
-        Permission.VIEW_SYSTEM_CONFIG,
-    }),
+    Role.ANALYST: frozenset(
+        {
+            Permission.VIEW_QUEUE,
+            Permission.VIEW_EVENT_DETAIL,
+            Permission.VIEW_AUDIT_LOG,
+            Permission.VIEW_STATS,
+            Permission.APPROVE_EVENT,
+            Permission.BLOCK_EVENT,
+            Permission.ESCALATE_EVENT,
+            Permission.VERIFY_AUDIT_CHAIN,
+        }
+    ),
+    Role.ADMIN: frozenset(
+        {
+            # Admin has all analyst permissions
+            Permission.VIEW_QUEUE,
+            Permission.VIEW_EVENT_DETAIL,
+            Permission.VIEW_AUDIT_LOG,
+            Permission.VIEW_STATS,
+            Permission.APPROVE_EVENT,
+            Permission.BLOCK_EVENT,
+            Permission.ESCALATE_EVENT,
+            Permission.VERIFY_AUDIT_CHAIN,
+            # Plus admin-only permissions
+            Permission.EXPORT_AUDIT_LOG,
+            Permission.VIEW_ALL_SESSIONS,
+            Permission.MANAGE_ROLES,
+            Permission.MODIFY_THRESHOLDS,
+            Permission.MODIFY_RULES,
+            Permission.CLEAR_QUEUE,
+            Permission.VIEW_SYSTEM_CONFIG,
+        }
+    ),
 }
 
 
 # ── Access denied exception ───────────────────────────────────────────────────
+
 
 class AccessDeniedError(Exception):
     """
@@ -139,8 +144,8 @@ class AccessDeniedError(Exception):
         permission: Permission,
     ) -> None:
         self.principal_id = principal_id
-        self.role         = role
-        self.permission   = permission
+        self.role = role
+        self.permission = permission
         super().__init__(
             f"Access denied: '{principal_id}' (role={role.value}) "
             f"does not have permission '{permission.name}'. "
@@ -149,6 +154,7 @@ class AccessDeniedError(Exception):
 
 
 # ── Principal ─────────────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class Principal:
@@ -165,8 +171,9 @@ class Principal:
         role:         The role assigned to this principal.
         display_name: Human-readable name for UI display.
     """
+
     principal_id: str
-    role:         Role
+    role: Role
     display_name: str = ""
 
     def __post_init__(self) -> None:
@@ -175,10 +182,7 @@ class Principal:
             raise ValueError("principal_id cannot be empty")
 
         # Sanitise — only allow safe characters
-        safe = "".join(
-            c for c in self.principal_id
-            if c.isalnum() or c in "_."
-        )
+        safe = "".join(c for c in self.principal_id if c.isalnum() or c in "_.")
         if len(safe) < 3:
             raise ValueError(
                 f"principal_id '{self.principal_id}' is too short or "
@@ -228,13 +232,11 @@ class Principal:
             )
 
     def __repr__(self) -> str:
-        return (
-            f"Principal(id={self.principal_id!r}, "
-            f"role={self.role.value!r})"
-        )
+        return f"Principal(id={self.principal_id!r}, " f"role={self.role.value!r})"
 
 
 # ── RBAC enforcer ─────────────────────────────────────────────────────────────
+
 
 class RBACEnforcer:
     """
@@ -297,9 +299,7 @@ class RBACEnforcer:
         """
         return principal.has_permission(permission)
 
-    def get_permitted_commands(
-        self, principal: Principal
-    ) -> list[str]:
+    def get_permitted_commands(self, principal: Principal) -> list[str]:
         """
         Return the list of SOC commands this principal may use.
 
@@ -312,26 +312,28 @@ class RBACEnforcer:
             List of command name strings.
         """
         command_permissions: dict[str, Permission] = {
-            "queue":    Permission.VIEW_QUEUE,
-            "review":   Permission.VIEW_EVENT_DETAIL,
-            "approve":  Permission.APPROVE_EVENT,
-            "block":    Permission.BLOCK_EVENT,
+            "queue": Permission.VIEW_QUEUE,
+            "review": Permission.VIEW_EVENT_DETAIL,
+            "approve": Permission.APPROVE_EVENT,
+            "block": Permission.BLOCK_EVENT,
             "escalate": Permission.ESCALATE_EVENT,
-            "verify":   Permission.VERIFY_AUDIT_CHAIN,
-            "logs":     Permission.VIEW_AUDIT_LOG,
-            "stats":    Permission.VIEW_STATS,
-            "export":   Permission.EXPORT_AUDIT_LOG,
-            "config":   Permission.VIEW_SYSTEM_CONFIG,
-            "roles":    Permission.MANAGE_ROLES,
+            "verify": Permission.VERIFY_AUDIT_CHAIN,
+            "logs": Permission.VIEW_AUDIT_LOG,
+            "stats": Permission.VIEW_STATS,
+            "export": Permission.EXPORT_AUDIT_LOG,
+            "config": Permission.VIEW_SYSTEM_CONFIG,
+            "roles": Permission.MANAGE_ROLES,
         }
 
         return [
-            cmd for cmd, perm in command_permissions.items()
+            cmd
+            for cmd, perm in command_permissions.items()
             if self.check(principal, perm)
         ]
 
 
 # ── Session factory ───────────────────────────────────────────────────────────
+
 
 def create_principal(
     principal_id: str,
@@ -356,10 +358,7 @@ def create_principal(
         role = Role(role_str.lower().strip())
     except ValueError:
         valid = [r.value for r in Role]
-        raise ValueError(
-            f"Invalid role '{role_str}'. "
-            f"Valid roles are: {valid}"
-        )
+        raise ValueError(f"Invalid role '{role_str}'. " f"Valid roles are: {valid}")
 
     return Principal(
         principal_id=principal_id,

@@ -66,11 +66,13 @@ log = get_logger("aisec.integrations.langchain")
 try:
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.outputs import LLMResult
+
     _LANGCHAIN_AVAILABLE = True
 except ImportError:
     try:
         from langchain.callbacks.base import BaseCallbackHandler  # type: ignore[no-redef]
-        from langchain.schema import LLMResult                    # type: ignore[no-redef]
+        from langchain.schema import LLMResult  # type: ignore[no-redef]
+
         _LANGCHAIN_AVAILABLE = True
     except ImportError:
         _LANGCHAIN_AVAILABLE = False
@@ -97,6 +99,7 @@ LOG_INPUT_PREFIX_LEN: int = 64
 
 # ── Security helpers ──────────────────────────────────────────────────────────
 
+
 def _sanitise_tool_name(name: str) -> str:
     """
     Sanitise a tool name before it enters the analysis pipeline.
@@ -119,10 +122,7 @@ def _sanitise_tool_name(name: str) -> str:
         return "unknown_tool"
 
     # Keep only safe characters
-    safe = "".join(
-        c for c in name
-        if c.isalnum() or c in "_."
-    )
+    safe = "".join(c for c in name if c.isalnum() or c in "_.")
 
     # Truncate
     safe = safe[:MAX_TOOL_NAME_LEN]
@@ -186,13 +186,14 @@ def _extract_payload(tool_name: str, tool_input: str) -> dict[str, Any]:
         Payload dictionary for Event.raw_payload.
     """
     payload: dict[str, Any] = {
-        "input_hash":   _hash_input(tool_input),
+        "input_hash": _hash_input(tool_input),
         "input_length": len(tool_input),
-        "tool_name":    tool_name,
+        "tool_name": tool_name,
     }
 
     # Detect numeric amounts in input — relevant for trading rules
     import re
+
     amount_match = re.search(r"\b(\d[\d,]*(?:\.\d+)?)\b", tool_input)
     if amount_match:
         try:
@@ -202,14 +203,21 @@ def _extract_payload(tool_name: str, tool_input: str) -> dict[str, Any]:
             pass
 
     # Detect after-hours indicators
-    after_hours_keywords = {"after_hours", "after-hours", "afterhours",
-                            "off_hours", "overnight", "weekend"}
+    after_hours_keywords = {
+        "after_hours",
+        "after-hours",
+        "afterhours",
+        "off_hours",
+        "overnight",
+        "weekend",
+    }
     if any(kw in tool_input.lower() for kw in after_hours_keywords):
         payload["after_hours"] = True
 
     # Detect burst/frequency signals
-    burst_match = re.search(r"burst[_\s]?rate[=:\s]+(\d+(?:\.\d+)?)",
-                             tool_input.lower())
+    burst_match = re.search(
+        r"burst[_\s]?rate[=:\s]+(\d+(?:\.\d+)?)", tool_input.lower()
+    )
     if burst_match:
         try:
             payload["burst_rate"] = float(burst_match.group(1))
@@ -225,6 +233,7 @@ def _extract_payload(tool_name: str, tool_input: str) -> dict[str, Any]:
 
 
 # ── Security exception ────────────────────────────────────────────────────────
+
 
 class AISeCSecurityError(Exception):
     """
@@ -250,11 +259,11 @@ class AISeCSecurityError(Exception):
         explanation: str,
         event_id: str,
     ) -> None:
-        self.decision    = decision
-        self.rule_hits   = rule_hits
-        self.risk_score  = risk_score
+        self.decision = decision
+        self.rule_hits = rule_hits
+        self.risk_score = risk_score
         self.explanation = explanation
-        self.event_id    = event_id
+        self.event_id = event_id
 
         super().__init__(
             f"AISec {decision.value}: {explanation[:200]} "
@@ -263,6 +272,7 @@ class AISeCSecurityError(Exception):
 
 
 # ── Callback handler ──────────────────────────────────────────────────────────
+
 
 class AISeCCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
     """
@@ -327,20 +337,19 @@ class AISeCCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
 
         # Validate and sanitise agent_id at construction
         # The agent cannot change this after the handler is created
-        safe_agent_id = "".join(
-            c for c in str(agent_id)
-            if c.isalnum() or c in "_."
-        )[:64]
+        safe_agent_id = "".join(c for c in str(agent_id) if c.isalnum() or c in "_.")[
+            :64
+        ]
         if len(safe_agent_id) < 3:
             safe_agent_id = "langchain_agent"
 
         # Store all as private — not accessible to subclasses
-        self.__engine        = engine
-        self.__scenario      = scenario
-        self.__agent_id      = safe_agent_id
+        self.__engine = engine
+        self.__scenario = scenario
+        self.__agent_id = safe_agent_id
         self.__block_on_review = block_on_review
-        self.__lock          = threading.Lock()
-        self.__call_count    = 0
+        self.__lock = threading.Lock()
+        self.__call_count = 0
 
         log.info(
             "aisec_langchain_handler_initialized",
@@ -424,9 +433,7 @@ class AISeCCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
             agent_id=self.__agent_id,
             run_id=str(run_id),
             output_length=len(str(output)),
-            output_hash=hashlib.sha256(
-                str(output).encode()
-            ).hexdigest()[:16],
+            output_hash=hashlib.sha256(str(output).encode()).hexdigest()[:16],
         )
 
     def on_tool_error(
@@ -481,8 +488,7 @@ class AISeCCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
         """
         # Extract tool name safely
         tool_name = _sanitise_tool_name(
-            serialized.get("name", "")
-            or serialized.get("id", ["unknown"])[-1]
+            serialized.get("name", "") or serialized.get("id", ["unknown"])[-1]
         )
 
         # Sanitise input — never pass raw input to our pipeline
@@ -499,9 +505,9 @@ class AISeCCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
         # the agent cannot override it through crafted tool calls
         event = Event(
             action_type=tool_name,
-            agent_id=self.__agent_id,    # immutable — set at construction
+            agent_id=self.__agent_id,  # immutable — set at construction
             target=tool_name,
-            scenario=self.__scenario,     # immutable — set at construction
+            scenario=self.__scenario,  # immutable — set at construction
             raw_payload=payload,
         )
 

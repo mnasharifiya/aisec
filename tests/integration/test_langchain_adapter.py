@@ -36,8 +36,8 @@ from aisec.integrations.langchain import (
 from aisec.core.engine import AnalysisEngine
 from aisec.storage.models import Decision, Scenario
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def engine(tmp_path: Path) -> AnalysisEngine:
@@ -71,6 +71,7 @@ def _serialized(name: str) -> dict:
 
 
 # ── Input sanitisation tests ──────────────────────────────────────────────────
+
 
 class TestInputSanitisation:
 
@@ -118,6 +119,7 @@ class TestInputSanitisation:
 
 # ── Payload extraction tests ──────────────────────────────────────────────────
 
+
 class TestPayloadExtraction:
 
     def test_extracts_numeric_amount(self) -> None:
@@ -145,15 +147,14 @@ class TestPayloadExtraction:
 
 # ── Handler construction tests ────────────────────────────────────────────────
 
+
 class TestHandlerConstruction:
 
     def test_rejects_non_engine(self) -> None:
         with pytest.raises(TypeError, match="AnalysisEngine"):
             AISeCCallbackHandler(engine="not_an_engine")  # type: ignore
 
-    def test_agent_id_sanitised_at_construction(
-        self, engine: AnalysisEngine
-    ) -> None:
+    def test_agent_id_sanitised_at_construction(self, engine: AnalysisEngine) -> None:
         handler = AISeCCallbackHandler(
             engine=engine,
             agent_id="agent; rm -rf /",
@@ -161,33 +162,26 @@ class TestHandlerConstruction:
         assert ";" not in handler.agent_id
         assert "rm" not in handler.agent_id
 
-    def test_short_agent_id_replaced_with_default(
-        self, engine: AnalysisEngine
-    ) -> None:
+    def test_short_agent_id_replaced_with_default(self, engine: AnalysisEngine) -> None:
         handler = AISeCCallbackHandler(engine=engine, agent_id="ab")
         assert handler.agent_id == "langchain_agent"
 
-    def test_agent_id_is_read_only(
-        self, trading_handler: AISeCCallbackHandler
-    ) -> None:
+    def test_agent_id_is_read_only(self, trading_handler: AISeCCallbackHandler) -> None:
         with pytest.raises(AttributeError):
             trading_handler.agent_id = "attacker"  # type: ignore
 
-    def test_scenario_is_read_only(
-        self, trading_handler: AISeCCallbackHandler
-    ) -> None:
+    def test_scenario_is_read_only(self, trading_handler: AISeCCallbackHandler) -> None:
         with pytest.raises(AttributeError):
             trading_handler.scenario = Scenario.URBAN_AI  # type: ignore
 
-    def test_repr_shows_safe_info(
-        self, trading_handler: AISeCCallbackHandler
-    ) -> None:
+    def test_repr_shows_safe_info(self, trading_handler: AISeCCallbackHandler) -> None:
         r = repr(trading_handler)
         assert "test_trading_bot" in r
         assert "trading_ai" in r
 
 
 # ── Security interception tests ───────────────────────────────────────────────
+
 
 class TestSecurityInterception:
 
@@ -213,12 +207,13 @@ class TestSecurityInterception:
                 run_id=_run_id(),
             )
         err = exc_info.value
-        assert err.decision in (Decision.BLOCK, Decision.ESCALATE,
-                                 Decision.PENDING_REVIEW)
+        assert err.decision in (
+            Decision.BLOCK,
+            Decision.ESCALATE,
+            Decision.PENDING_REVIEW,
+        )
 
-    def test_curfew_is_blocked(
-        self, urban_handler: AISeCCallbackHandler
-    ) -> None:
+    def test_curfew_is_blocked(self, urban_handler: AISeCCallbackHandler) -> None:
         with pytest.raises(AISeCSecurityError):
             urban_handler.on_tool_start(
                 serialized=_serialized("set_curfew"),
@@ -226,9 +221,7 @@ class TestSecurityInterception:
                 run_id=_run_id(),
             )
 
-    def test_safe_tool_is_allowed(
-        self, trading_handler: AISeCCallbackHandler
-    ) -> None:
+    def test_safe_tool_is_allowed(self, trading_handler: AISeCCallbackHandler) -> None:
         # Should NOT raise — safe action must pass through
         trading_handler.on_tool_start(
             serialized=_serialized("read_market_data"),
@@ -245,9 +238,7 @@ class TestSecurityInterception:
             run_id=_run_id(),
         )
 
-    def test_call_count_increments(
-        self, trading_handler: AISeCCallbackHandler
-    ) -> None:
+    def test_call_count_increments(self, trading_handler: AISeCCallbackHandler) -> None:
         assert trading_handler.call_count == 0
         trading_handler.on_tool_start(
             serialized=_serialized("read_market_data"),
@@ -263,6 +254,7 @@ class TestSecurityInterception:
         If the engine itself raises unexpectedly — fail closed.
         AISec must never allow an action when it cannot analyse it.
         """
+
         def broken_analyse(*args, **kwargs):
             raise RuntimeError("Simulated engine failure")
 
@@ -292,17 +284,17 @@ class TestSecurityInterception:
         # it should either block or allow based on sanitised name
         try:
             trading_handler.on_tool_start(
-                serialized={"name": "read_data; DROP TABLE audit;--",
-                             "id": ["tools"]},
+                serialized={"name": "read_data; DROP TABLE audit;--", "id": ["tools"]},
                 input_str="safe input",
                 run_id=_run_id(),
             )
         except AISeCSecurityError:
-            pass   # Blocked is fine
+            pass  # Blocked is fine
         # What matters is no unexpected exception escapes
 
 
 # ── Thread safety tests ───────────────────────────────────────────────────────
+
 
 class TestThreadSafety:
 
@@ -323,7 +315,7 @@ class TestThreadSafety:
                     run_id=_run_id(),
                 )
             except AISeCSecurityError:
-                pass   # Blocked is acceptable
+                pass  # Blocked is acceptable
             except Exception as e:
                 errors.append(e)
 
@@ -342,6 +334,7 @@ class TestThreadSafety:
         self, trading_handler: AISeCCallbackHandler
     ) -> None:
         """Call count must be accurate even under concurrent access."""
+
         def call_handler():
             try:
                 trading_handler.on_tool_start(
@@ -363,6 +356,7 @@ class TestThreadSafety:
 
 
 # ── Audit log integration ─────────────────────────────────────────────────────
+
 
 class TestAuditIntegration:
 
@@ -391,11 +385,11 @@ class TestAuditIntegration:
         trading_handler: AISeCCallbackHandler,
     ) -> None:
         tools = [
-            ("read_market_data",     "AAPL",          False),
-            ("manipulate_news_feed", "fake data",     True),
-            ("read_market_data",     "MSFT",          False),
-            ("execute_large_trade",  "amount=5000000",True),
-            ("read_market_data",     "GOOG",          False),
+            ("read_market_data", "AAPL", False),
+            ("manipulate_news_feed", "fake data", True),
+            ("read_market_data", "MSFT", False),
+            ("execute_large_trade", "amount=5000000", True),
+            ("read_market_data", "GOOG", False),
         ]
         for tool, inp, should_block in tools:
             try:

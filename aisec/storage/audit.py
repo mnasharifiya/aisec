@@ -41,9 +41,9 @@ class AuditLogger:
     """
 
     def __init__(self, log_path: Path = DEFAULT_LOG_PATH) -> None:
-        self._path  = log_path
+        self._path = log_path
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._lock  = threading.Lock()   # Serialises all writes — thread safety
+        self._lock = threading.Lock()  # Serialises all writes — thread safety
         self._last_hash: str = self._load_last_hash()
         self._warn_if_insecure()
 

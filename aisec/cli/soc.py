@@ -68,6 +68,7 @@ _last_decision_time: float = 0.0
 # ─ SOC queue ─────────────────────────────────────────────────────────────────
 # (Unchanged from your original code)
 
+
 class SOCQueue:
     """
     In-memory queue of events requiring analyst review.
@@ -286,6 +287,7 @@ def _print_help() -> None:
 # ── Command parser ────────────────────────────────────────────────────────────
 # (Unchanged from your original code)
 
+
 def _parse_index(parts: list[str], queue: SOCQueue) -> int | None:
     """
     Parse and validate an event index from command parts.
@@ -369,18 +371,21 @@ def _check_rate_limit() -> bool:
 
 # --- CHANGE 4: Added helper functions ---
 
+
 def _print_access_denied(error: AccessDeniedError) -> None:
     """Display a clear access denied message to the analyst."""
     console.print()
-    console.print(Panel(
-        f"[bold red]ACCESS DENIED[/bold red]\n\n"
-        f"[white]Principal:[/white]  {error.principal_id}\n"
-        f"[white]Role:[/white]       {error.role.value}\n"
-        f"[white]Permission:[/white] {error.permission.name}\n\n"
-        f"[dim]Contact your AISec administrator to request elevated access.[/dim]",
-        title="[bold red]⛔ Permission Denied[/bold red]",
-        border_style="red",
-    ))
+    console.print(
+        Panel(
+            f"[bold red]ACCESS DENIED[/bold red]\n\n"
+            f"[white]Principal:[/white]  {error.principal_id}\n"
+            f"[white]Role:[/white]       {error.role.value}\n"
+            f"[white]Permission:[/white] {error.permission.name}\n\n"
+            f"[dim]Contact your AISec administrator to request elevated access.[/dim]",
+            title="[bold red]⛔ Permission Denied[/bold red]",
+            border_style="red",
+        )
+    )
     console.print()
 
 
@@ -392,18 +397,18 @@ def _print_rbac_help(
     permitted = set(enforcer.get_permitted_commands(principal))
 
     all_commands = {
-        "queue":    ("Show all pending events",           Permission.VIEW_QUEUE),
-        "review":   ("Review event N in detail",          Permission.VIEW_EVENT_DETAIL),
-        "approve":  ("Approve event N",                   Permission.APPROVE_EVENT),
-        "block":    ("Block event N",                     Permission.BLOCK_EVENT),
-        "escalate": ("Escalate event N",                  Permission.ESCALATE_EVENT),
-        "stats":    ("Show session statistics",           Permission.VIEW_STATS),
-        "verify":   ("Verify audit chain integrity",      Permission.VERIFY_AUDIT_CHAIN),
-        "logs":     ("Show last N audit log entries",     Permission.VIEW_AUDIT_LOG),
-        "export":   ("Export audit log to file",          Permission.EXPORT_AUDIT_LOG),
-        "config":   ("View system configuration",         Permission.VIEW_SYSTEM_CONFIG),
-        "help":     ("Show this help message",            None),
-        "exit":     ("Exit the SOC console",              None),
+        "queue": ("Show all pending events", Permission.VIEW_QUEUE),
+        "review": ("Review event N in detail", Permission.VIEW_EVENT_DETAIL),
+        "approve": ("Approve event N", Permission.APPROVE_EVENT),
+        "block": ("Block event N", Permission.BLOCK_EVENT),
+        "escalate": ("Escalate event N", Permission.ESCALATE_EVENT),
+        "stats": ("Show session statistics", Permission.VIEW_STATS),
+        "verify": ("Verify audit chain integrity", Permission.VERIFY_AUDIT_CHAIN),
+        "logs": ("Show last N audit log entries", Permission.VIEW_AUDIT_LOG),
+        "export": ("Export audit log to file", Permission.EXPORT_AUDIT_LOG),
+        "config": ("View system configuration", Permission.VIEW_SYSTEM_CONFIG),
+        "help": ("Show this help message", None),
+        "exit": ("Exit the SOC console", None),
     }
 
     lines = []
@@ -414,23 +419,24 @@ def _print_rbac_help(
         else:
             style = "dim"
             access = " [red][no access][/red]"
-        lines.append(
-            f"  [{style}]{cmd:<12}[/{style}] {desc}{access}"
-        )
+        lines.append(f"  [{style}]{cmd:<12}[/{style}] {desc}{access}")
 
-    console.print(Panel(
-        "\n".join(lines),
-        title=f"[bold]Commands — Role: {principal.role.value.upper()}[/bold]",
-        border_style="dim",
-    ))
+    console.print(
+        Panel(
+            "\n".join(lines),
+            title=f"[bold]Commands — Role: {principal.role.value.upper()}[/bold]",
+            border_style="dim",
+        )
+    )
 
 
 # --- CHANGE 3: Replaced _run_soc_session with RBAC version ---
 
+
 def _run_soc_session(
-    queue:    SOCQueue,
+    queue: SOCQueue,
     principal: Principal,
-    enforcer:  RBACEnforcer,
+    enforcer: RBACEnforcer,
 ) -> None:
     """
     Run the interactive SOC analyst console session with RBAC enforcement.
@@ -447,8 +453,8 @@ def _run_soc_session(
     # Show role badge
     role_style = "bold magenta" if principal.role.value == "admin" else "bold cyan"
     console.print(
-        Text(f"  Role: ", style="white") +
-        Text(principal.role.value.upper(), style=role_style)
+        Text(f"  Role: ", style="white")
+        + Text(principal.role.value.upper(), style=role_style)
     )
     console.print()
 
@@ -460,9 +466,7 @@ def _run_soc_session(
             style="dim",
         )
     )
-    console.print(
-        Text("  Type 'help' for details, 'exit' to quit.", style="dim")
-    )
+    console.print(Text("  Type 'help' for details, 'exit' to quit.", style="dim"))
     console.print()
 
     while True:
@@ -477,9 +481,9 @@ def _run_soc_session(
         if not raw:
             continue
 
-        raw   = raw[:256]
+        raw = raw[:256]
         parts = raw.split()
-        cmd   = parts[0].lower()
+        cmd = parts[0].lower()
 
         if cmd == "exit":
             break
@@ -516,13 +520,16 @@ def _run_soc_session(
                     _print_event_detail(result, idx + 1)
                     if _confirm_action("approve", idx + 1):
                         queue.resolve(
-                            result, "approve",
+                            result,
+                            "approve",
                             principal.principal_id,
                             reason="Analyst approved after review",
                         )
                         console.print(
-                            Text(f"  ✔ Event #{idx+1} approved and logged.",
-                                 style="bold green")
+                            Text(
+                                f"  ✔ Event #{idx+1} approved and logged.",
+                                style="bold green",
+                            )
                         )
             except AccessDeniedError as e:
                 _print_access_denied(e)
@@ -538,13 +545,16 @@ def _run_soc_session(
                     _print_event_detail(result, idx + 1)
                     if _confirm_action("block", idx + 1):
                         queue.resolve(
-                            result, "block",
+                            result,
+                            "block",
                             principal.principal_id,
                             reason="Analyst blocked after review",
                         )
                         console.print(
-                            Text(f"  ✘ Event #{idx+1} blocked and logged.",
-                                 style="bold red")
+                            Text(
+                                f"  ✘ Event #{idx+1} blocked and logged.",
+                                style="bold red",
+                            )
                         )
             except AccessDeniedError as e:
                 _print_access_denied(e)
@@ -560,13 +570,16 @@ def _run_soc_session(
                     _print_event_detail(result, idx + 1)
                     if _confirm_action("escalate", idx + 1):
                         queue.resolve(
-                            result, "escalate",
+                            result,
+                            "escalate",
                             principal.principal_id,
                             reason="Escalated to senior analyst",
                         )
                         console.print(
-                            Text(f"  ⬆ Event #{idx+1} escalated and logged.",
-                                 style="bold magenta")
+                            Text(
+                                f"  ⬆ Event #{idx+1} escalated and logged.",
+                                style="bold magenta",
+                            )
                         )
             except AccessDeniedError as e:
                 _print_access_denied(e)
@@ -588,13 +601,17 @@ def _run_soc_session(
                 ok, errors = queue.verify_chain()
                 if ok:
                     console.print(
-                        Text("  ✔ Audit chain INTACT — no tampering detected.",
-                             style="bold green")
+                        Text(
+                            "  ✔ Audit chain INTACT — no tampering detected.",
+                            style="bold green",
+                        )
                     )
                 else:
                     console.print(
-                        Text(f"  ✘ Audit chain BROKEN — {len(errors)} error(s):",
-                             style="bold red")
+                        Text(
+                            f"  ✘ Audit chain BROKEN — {len(errors)} error(s):",
+                            style="bold red",
+                        )
                     )
                     for err in errors:
                         console.print(Text(f"    • {err}", style="red"))
@@ -614,25 +631,22 @@ def _run_soc_session(
                 entries = queue.get_last_entries(n)
                 console.print()
                 console.print(
-                    Text(f"  Last {len(entries)} audit log entries:",
-                         style="dim")
+                    Text(f"  Last {len(entries)} audit log entries:", style="dim")
                 )
                 for entry in entries:
-                    ts      = entry.timestamp[11:19]
+                    ts = entry.timestamp[11:19]
                     payload = entry.payload
-                    action  = payload.get(
-                        "action_type",
-                        payload.get("analyst_decision", "?")
+                    action = payload.get(
+                        "action_type", payload.get("analyst_decision", "?")
                     )
                     decision = payload.get(
-                        "decision",
-                        payload.get("analyst_decision", "?")
+                        "decision", payload.get("analyst_decision", "?")
                     )
                     console.print(
-                        Text(f"  [{ts}] ", style="dim") +
-                        Text(f"{entry.record_type:<18} ", style="cyan") +
-                        Text(f"{action:<28} ", style="white") +
-                        Text(f"{decision}", style="yellow")
+                        Text(f"  [{ts}] ", style="dim")
+                        + Text(f"{entry.record_type:<18} ", style="cyan")
+                        + Text(f"{action:<28} ", style="white")
+                        + Text(f"{decision}", style="yellow")
                     )
                 console.print()
             except AccessDeniedError as e:
@@ -641,9 +655,7 @@ def _run_soc_session(
         elif cmd == "export":
             try:
                 enforcer.enforce(principal, Permission.EXPORT_AUDIT_LOG)
-                console.print(
-                    Text("  Use: aisec logs --export <file>", style="dim")
-                )
+                console.print(Text("  Use: aisec logs --export <file>", style="dim"))
             except AccessDeniedError as e:
                 _print_access_denied(e)
 
@@ -651,16 +663,18 @@ def _run_soc_session(
             try:
                 enforcer.enforce(principal, Permission.VIEW_SYSTEM_CONFIG)
                 console.print()
-                console.print(Panel(
-                    f"[bold white]AISec System Configuration[/bold white]\n"
-                    f"Version:         1.0.0\n"
-                    f"Block threshold: 0.80\n"
-                    f"Review threshold: 0.60\n"
-                    f"Watch threshold:  0.30\n"
-                    f"Audit log:        .aisec/soc_session.jsonl",
-                    title="[bold]System Config[/bold]",
-                    border_style="cyan",
-                ))
+                console.print(
+                    Panel(
+                        f"[bold white]AISec System Configuration[/bold white]\n"
+                        f"Version:         1.0.0\n"
+                        f"Block threshold: 0.80\n"
+                        f"Review threshold: 0.60\n"
+                        f"Watch threshold:  0.30\n"
+                        f"Audit log:        .aisec/soc_session.jsonl",
+                        title="[bold]System Config[/bold]",
+                        border_style="cyan",
+                    )
+                )
                 console.print()
             except AccessDeniedError as e:
                 _print_access_denied(e)
@@ -676,6 +690,7 @@ def _run_soc_session(
 
 
 # --- CHANGE 2: Updated click command with --role option ---
+
 
 @click.command("soc")
 @click.option(
@@ -732,23 +747,23 @@ def soc_command(analyst: str, role: str, scenario: str, steps: int) -> None:
         return
 
     log_path = Path(".aisec") / "soc_session.jsonl"
-    engine   = AnalysisEngine(log_path=log_path)
-    logger   = AuditLogger(log_path=log_path)
-    queue    = SOCQueue(audit_logger=logger)
+    engine = AnalysisEngine(log_path=log_path)
+    logger = AuditLogger(log_path=log_path)
+    queue = SOCQueue(audit_logger=logger)
     enforcer = RBACEnforcer()
 
     console.print()
     console.print(
-        Text("  Simulating agent actions — populating SOC queue...",
-             style="dim")
+        Text("  Simulating agent actions — populating SOC queue...", style="dim")
     )
 
     import random
+
     trading_pool = TRADING_SAFE * 2 + TRADING_DANGEROUS
-    urban_pool   = URBAN_SAFE   * 3 + URBAN_DANGEROUS
+    urban_pool = URBAN_SAFE * 3 + URBAN_DANGEROUS
 
     trading_agent = TradingAgent(engine)
-    urban_agent   = UrbanAgent(engine)
+    urban_agent = UrbanAgent(engine)
 
     flagged = 0
     for i in range(steps):
@@ -784,16 +799,18 @@ def soc_command(analyst: str, role: str, scenario: str, steps: int) -> None:
     # Exit summary
     console.print()
     stats = queue.stats()
-    console.print(Panel(
-        f"[bold white]Session complete[/bold white]\n"
-        f"Analyst:          {analyst}\n"
-        f"Role:             {role}\n"
-        f"Events reviewed:  {queue.resolved_count()}\n"
-        f"Approved:         [green]{stats['approve']}[/green]\n"
-        f"Blocked:          [red]{stats['block']}[/red]\n"
-        f"Escalated:        [magenta]{stats['escalate']}[/magenta]\n"
-        f"Still pending:    [yellow]{queue.pending_count()}[/yellow]",
-        title="[bold cyan]SOC Session Summary[/bold cyan]",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[bold white]Session complete[/bold white]\n"
+            f"Analyst:          {analyst}\n"
+            f"Role:             {role}\n"
+            f"Events reviewed:  {queue.resolved_count()}\n"
+            f"Approved:         [green]{stats['approve']}[/green]\n"
+            f"Blocked:          [red]{stats['block']}[/red]\n"
+            f"Escalated:        [magenta]{stats['escalate']}[/magenta]\n"
+            f"Still pending:    [yellow]{queue.pending_count()}[/yellow]",
+            title="[bold cyan]SOC Session Summary[/bold cyan]",
+            border_style="cyan",
+        )
+    )
     console.print()
