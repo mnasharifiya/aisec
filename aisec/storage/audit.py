@@ -11,6 +11,7 @@ Storage: append-only JSONL file — one JSON object per line.
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -40,8 +41,9 @@ class AuditLogger:
     """
 
     def __init__(self, log_path: Path = DEFAULT_LOG_PATH) -> None:
-        self._path = log_path
+        self._path  = log_path
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock  = threading.Lock()   # Serialises all writes — thread safety
         self._last_hash: str = self._load_last_hash()
         self._warn_if_insecure()
 
@@ -83,24 +85,28 @@ class AuditLogger:
     ) -> AuditLogEntry:
         """
         Append a new entry to the audit log.
-
+        Thread-safe: acquires a lock for the entire read-hash →
+        build-entry → write sequence. This ensures:
+        1. prev_hash always refers to the immediately preceding entry.
+        2. No two threads write simultaneously (no interleaved bytes).
+        3. The hash chain is always linear — never forked.
         Args:
-            record_type:  Category of the record (e.g. "event", "alert").
-            record_id:    Unique identifier of the record being logged.
-            payload:      Arbitrary data to store with this entry.
-
+            record_type: Category of the record.
+            record_id:   Unique identifier of the record.
+            payload:     Arbitrary data to store.
         Returns:
             The created AuditLogEntry with its computed hash.
         """
-        entry = AuditLogEntry(
-            record_type=record_type,
-            record_id=record_id,
-            payload=payload,
-            prev_hash=self._last_hash,
-        )
-        self._append(entry)
-        self._last_hash = entry.current_hash
-        return entry
+        with self._lock:
+            entry = AuditLogEntry(
+                record_type=record_type,
+                record_id=record_id,
+                payload=payload,
+                prev_hash=self._last_hash,
+            )
+            self._append(entry)
+            self._last_hash = entry.current_hash
+            return entry
 
     def verify_chain(self) -> tuple[bool, list[str]]:
         """
