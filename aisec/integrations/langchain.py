@@ -70,7 +70,7 @@ try:
 except ImportError:
     try:
         from langchain.callbacks.base import BaseCallbackHandler  # type: ignore[no-redef]
-        from langchain.schema import LLMResult                     # type: ignore[no-redef]
+        from langchain.schema import LLMResult                    # type: ignore[no-redef]
         _LANGCHAIN_AVAILABLE = True
     except ImportError:
         _LANGCHAIN_AVAILABLE = False
@@ -121,7 +121,7 @@ def _sanitise_tool_name(name: str) -> str:
     # Keep only safe characters
     safe = "".join(
         c for c in name
-        if c.isalnum() or c in "-_."
+        if c.isalnum() or c in "_."
     )
 
     # Truncate
@@ -303,7 +303,7 @@ class AISeCCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
     """
 
     # Tell LangChain we want to handle tool events
-    raise_error = True   # Propagate our SecurityError to the agent
+    raise_error = True  # Propagate our SecurityError to the agent
 
     def __init__(
         self,
@@ -329,18 +329,18 @@ class AISeCCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
         # The agent cannot change this after the handler is created
         safe_agent_id = "".join(
             c for c in str(agent_id)
-            if c.isalnum() or c in "-_."
+            if c.isalnum() or c in "_."
         )[:64]
         if len(safe_agent_id) < 3:
             safe_agent_id = "langchain_agent"
 
         # Store all as private — not accessible to subclasses
-        self.__engine         = engine
-        self.__scenario       = scenario
-        self.__agent_id       = safe_agent_id
+        self.__engine        = engine
+        self.__scenario      = scenario
+        self.__agent_id      = safe_agent_id
         self.__block_on_review = block_on_review
-        self.__lock           = threading.Lock()
-        self.__call_count     = 0
+        self.__lock          = threading.Lock()
+        self.__call_count    = 0
 
         log.info(
             "aisec_langchain_handler_initialized",
@@ -499,9 +499,9 @@ class AISeCCallbackHandler(BaseCallbackHandler):  # type: ignore[misc]
         # the agent cannot override it through crafted tool calls
         event = Event(
             action_type=tool_name,
-            agent_id=self.__agent_id,     # immutable — set at construction
+            agent_id=self.__agent_id,    # immutable — set at construction
             target=tool_name,
-            scenario=self.__scenario,      # immutable — set at construction
+            scenario=self.__scenario,     # immutable — set at construction
             raw_payload=payload,
         )
 
