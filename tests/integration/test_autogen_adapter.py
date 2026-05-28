@@ -24,7 +24,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-import pytest
+import pytest  # type: ignore[import]
 
 from aisec.integrations.autogen import (
     AISeCAutoGenSecurityError,
