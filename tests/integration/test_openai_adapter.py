@@ -30,8 +30,8 @@ from aisec.integrations.openai_tools import (
 from aisec.core.engine import AnalysisEngine
 from aisec.storage.models import Decision, Scenario
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def engine(tmp_path: Path) -> AnalysisEngine:
@@ -57,23 +57,25 @@ def urban_interceptor(engine: AnalysisEngine) -> AISeCOpenAIInterceptor:
 
 
 def _make_tool_call(
-    name:      str,
+    name: str,
     arguments: dict,
-    call_id:   str = "call_test123",
+    call_id: str = "call_test123",
 ) -> dict:
     """Build an OpenAI tool call dict for testing."""
     import json
+
     return {
-        "id":   call_id,
+        "id": call_id,
         "type": "function",
         "function": {
-            "name":      name,
+            "name": name,
             "arguments": json.dumps(arguments),
         },
     }
 
 
 # ── Tool name validation tests ────────────────────────────────────────────────
+
 
 class TestToolNameValidation:
 
@@ -101,6 +103,7 @@ class TestToolNameValidation:
 
 
 # ── JSON argument parsing tests ───────────────────────────────────────────────
+
 
 class TestArgumentParsing:
 
@@ -135,28 +138,30 @@ class TestArgumentParsing:
 
 # ── Tool call field extraction tests ─────────────────────────────────────────
 
+
 class TestToolCallExtraction:
 
     def test_extracts_from_dict(self) -> None:
         tc = _make_tool_call("execute_trade", {"amount": 5000})
         call_id, name, args = _extract_tool_call_fields(tc)
         assert call_id == "call_test123"
-        assert name    == "execute_trade"
-        assert "5000"  in args
+        assert name == "execute_trade"
+        assert "5000" in args
 
     def test_extracts_from_object_with_attributes(self) -> None:
         """Test extraction from an object that mimics OpenAI SDK."""
+
         class MockFunction:
-            name      = "execute_trade"
+            name = "execute_trade"
             arguments = '{"amount": 5000}'
 
         class MockToolCall:
-            id       = "call_abc123"
+            id = "call_abc123"
             function = MockFunction()
 
         call_id, name, args = _extract_tool_call_fields(MockToolCall())
         assert call_id == "call_abc123"
-        assert name    == "execute_trade"
+        assert name == "execute_trade"
 
     def test_handles_missing_function_gracefully(self) -> None:
         """
@@ -172,6 +177,7 @@ class TestToolCallExtraction:
 
 # ── Interceptor construction tests ────────────────────────────────────────────
 
+
 class TestInterceptorConstruction:
 
     def test_rejects_non_engine(self) -> None:
@@ -182,9 +188,7 @@ class TestInterceptorConstruction:
         i = AISeCOpenAIInterceptor(engine=engine, agent_id="agent;DROP TABLE")
         assert ";" not in i.agent_id
 
-    def test_short_id_replaced_with_default(
-        self, engine: AnalysisEngine
-    ) -> None:
+    def test_short_id_replaced_with_default(self, engine: AnalysisEngine) -> None:
         i = AISeCOpenAIInterceptor(engine=engine, agent_id="ab")
         assert i.agent_id == "openai_agent"
 
@@ -205,17 +209,18 @@ class TestInterceptorConstruction:
     ) -> None:
         r = repr(trading_interceptor)
         assert "test_trading_gpt4" in r
-        assert "trading_ai"        in r
+        assert "trading_ai" in r
 
 
 # ── Single call analysis tests ────────────────────────────────────────────────
+
 
 class TestSingleCallAnalysis:
 
     def test_safe_call_is_allowed(
         self, trading_interceptor: AISeCOpenAIInterceptor
     ) -> None:
-        tc     = _make_tool_call("read_market_data", {"symbol": "AAPL"})
+        tc = _make_tool_call("read_market_data", {"symbol": "AAPL"})
         result = trading_interceptor.analyse_single_call(tc)
         assert result.allowed
         assert result.decision == Decision.ALLOW
@@ -253,9 +258,7 @@ class TestSingleCallAnalysis:
         with pytest.raises(AISeCOpenAISecurityError):
             trading_interceptor.analyse_single_call(tc)
 
-    def test_curfew_is_blocked(
-        self, urban_interceptor: AISeCOpenAIInterceptor
-    ) -> None:
+    def test_curfew_is_blocked(self, urban_interceptor: AISeCOpenAIInterceptor) -> None:
         tc = _make_tool_call(
             "set_curfew",
             {"zone": "ALL", "duration_hours": 48},
@@ -266,7 +269,7 @@ class TestSingleCallAnalysis:
     def test_sensor_read_is_allowed(
         self, urban_interceptor: AISeCOpenAIInterceptor
     ) -> None:
-        tc     = _make_tool_call("read_sensor", {"sensor_id": "traffic_42"})
+        tc = _make_tool_call("read_sensor", {"sensor_id": "traffic_42"})
         result = urban_interceptor.analyse_single_call(tc)
         assert result.allowed
 
@@ -279,11 +282,14 @@ class TestSingleCallAnalysis:
             agent_id="no_raise_test",
             raise_on_block=False,
         )
-        tc     = _make_tool_call("manipulate_news_feed", {})
+        tc = _make_tool_call("manipulate_news_feed", {})
         result = interceptor.analyse_single_call(tc)
         assert result.blocked
-        assert result.decision in (Decision.BLOCK, Decision.ESCALATE,
-                                   Decision.PENDING_REVIEW)
+        assert result.decision in (
+            Decision.BLOCK,
+            Decision.ESCALATE,
+            Decision.PENDING_REVIEW,
+        )
 
     def test_malformed_arguments_block_call(
         self, trading_interceptor: AISeCOpenAIInterceptor
@@ -292,20 +298,18 @@ class TestSingleCallAnalysis:
         tc = {
             "id": "call_test",
             "type": "function",
-            "function": {
-                "name":      "execute_trade",
-                "arguments": "{malformed json{{{"
-            }
+            "function": {"name": "execute_trade", "arguments": "{malformed json{{{"},
         }
         # Should not crash — either allow or block gracefully
         try:
             result = trading_interceptor.analyse_single_call(tc)
             assert result is not None
         except AISeCOpenAISecurityError:
-            pass   # Blocking malformed calls is also correct
+            pass  # Blocking malformed calls is also correct
 
 
 # ── Batch analysis tests ──────────────────────────────────────────────────────
+
 
 class TestBatchAnalysis:
 
@@ -320,15 +324,15 @@ class TestBatchAnalysis:
         batch = trading_interceptor.analyse_tool_calls(calls)
         assert not batch.any_blocked
         assert len(batch.allowed_calls) == 3
-        assert batch.total             == 3
+        assert batch.total == 3
 
     def test_mixed_batch_blocks_dangerous(
         self, trading_interceptor: AISeCOpenAIInterceptor
     ) -> None:
         calls = [
-            _make_tool_call("read_market_data",    {"symbol": "AAPL"}, "call_1"),
-            _make_tool_call("manipulate_news_feed",{"content": "fake"},"call_2"),
-            _make_tool_call("read_market_data",    {"symbol": "MSFT"}, "call_3"),
+            _make_tool_call("read_market_data", {"symbol": "AAPL"}, "call_1"),
+            _make_tool_call("manipulate_news_feed", {"content": "fake"}, "call_2"),
+            _make_tool_call("read_market_data", {"symbol": "MSFT"}, "call_3"),
         ]
         with pytest.raises(AISeCOpenAISecurityError) as exc_info:
             trading_interceptor.analyse_tool_calls(calls)
@@ -350,8 +354,8 @@ class TestBatchAnalysis:
         )
         calls = [
             _make_tool_call("manipulate_news_feed", {}, "call_1"),
-            _make_tool_call("read_market_data",     {}, "call_2"),
-            _make_tool_call("override_risk_limit",  {}, "call_3"),
+            _make_tool_call("read_market_data", {}, "call_2"),
+            _make_tool_call("override_risk_limit", {}, "call_3"),
         ]
         batch = interceptor.analyse_tool_calls(calls)
         assert batch.total == 3
@@ -361,7 +365,7 @@ class TestBatchAnalysis:
         self, trading_interceptor: AISeCOpenAIInterceptor
     ) -> None:
         batch = trading_interceptor.analyse_tool_calls([])
-        assert batch.total      == 0
+        assert batch.total == 0
         assert not batch.any_blocked
 
     def test_tool_call_id_preserved_in_result(
@@ -376,21 +380,17 @@ class TestBatchAnalysis:
 
 # ── Monitoring tests ──────────────────────────────────────────────────────────
 
+
 class TestMonitoring:
 
     def test_call_count_tracks_all_calls(
         self, trading_interceptor: AISeCOpenAIInterceptor
     ) -> None:
-        calls = [
-            _make_tool_call("read_market_data", {}, f"call_{i}")
-            for i in range(5)
-        ]
+        calls = [_make_tool_call("read_market_data", {}, f"call_{i}") for i in range(5)]
         trading_interceptor.analyse_tool_calls(calls)
         assert trading_interceptor.call_count == 5
 
-    def test_blocked_count_tracks_blocks(
-        self, engine: AnalysisEngine
-    ) -> None:
+    def test_blocked_count_tracks_blocks(self, engine: AnalysisEngine) -> None:
         interceptor = AISeCOpenAIInterceptor(
             engine=engine,
             scenario=Scenario.TRADING_AI,
@@ -398,8 +398,8 @@ class TestMonitoring:
             raise_on_block=False,
         )
         calls = [
-            _make_tool_call("read_market_data",    {}, "call_1"),
-            _make_tool_call("manipulate_news_feed",{}, "call_2"),
+            _make_tool_call("read_market_data", {}, "call_1"),
+            _make_tool_call("manipulate_news_feed", {}, "call_2"),
         ]
         interceptor.analyse_tool_calls(calls)
         assert interceptor.blocked_count >= 1
@@ -411,6 +411,7 @@ class TestMonitoring:
 
 
 # ── Thread safety tests ───────────────────────────────────────────────────────
+
 
 class TestThreadSafety:
 
@@ -434,9 +435,7 @@ class TestThreadSafety:
         for t in threads:
             t.join()
 
-        assert errors == [], (
-            f"Thread safety failure: {[str(e) for e in errors[:3]]}"
-        )
+        assert errors == [], f"Thread safety failure: {[str(e) for e in errors[:3]]}"
 
     def test_call_count_accurate_under_concurrency(
         self, trading_interceptor: AISeCOpenAIInterceptor
@@ -461,15 +460,16 @@ class TestThreadSafety:
 
 # ── Audit log tests ───────────────────────────────────────────────────────────
 
+
 class TestAuditIntegration:
 
     def test_every_call_logged(
         self, engine: AnalysisEngine, trading_interceptor: AISeCOpenAIInterceptor
     ) -> None:
         calls = [
-            _make_tool_call("read_market_data",    {"symbol": "AAPL"}, "c1"),
-            _make_tool_call("manipulate_news_feed",{"content": "x"},   "c2"),
-            _make_tool_call("read_market_data",    {"symbol": "MSFT"}, "c3"),
+            _make_tool_call("read_market_data", {"symbol": "AAPL"}, "c1"),
+            _make_tool_call("manipulate_news_feed", {"content": "x"}, "c2"),
+            _make_tool_call("read_market_data", {"symbol": "MSFT"}, "c3"),
         ]
         try:
             trading_interceptor.analyse_tool_calls(calls)
@@ -478,20 +478,15 @@ class TestAuditIntegration:
 
         assert engine.audit_count() == 3
 
-    def test_audit_chain_intact_after_mixed_calls(
-        self, engine: AnalysisEngine
-    ) -> None:
+    def test_audit_chain_intact_after_mixed_calls(self, engine: AnalysisEngine) -> None:
         interceptor = AISeCOpenAIInterceptor(
             engine=engine,
             scenario=Scenario.TRADING_AI,
             agent_id="audit_test",
             raise_on_block=False,
         )
-        calls = [
-            _make_tool_call("read_market_data",    {}, f"c{i}")
-            for i in range(5)
-        ] + [
-            _make_tool_call("manipulate_news_feed",{}, "c_danger"),
+        calls = [_make_tool_call("read_market_data", {}, f"c{i}") for i in range(5)] + [
+            _make_tool_call("manipulate_news_feed", {}, "c_danger"),
         ]
         interceptor.analyse_tool_calls(calls)
 

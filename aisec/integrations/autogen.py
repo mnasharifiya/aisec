@@ -86,6 +86,7 @@ log = get_logger("aisec.integrations.autogen")
 
 try:
     import autogen  # type: ignore[import]
+
     _AUTOGEN_AVAILABLE = True
 except ImportError:
     _AUTOGEN_AVAILABLE = False
@@ -107,6 +108,7 @@ LOG_INPUT_PREFIX_LEN: int = 64
 
 # ── Security exception ────────────────────────────────────────────────────────
 
+
 class AISeCAutoGenSecurityError(Exception):
     """
     Raised when AISec blocks an AutoGen tool call.
@@ -125,19 +127,19 @@ class AISeCAutoGenSecurityError(Exception):
 
     def __init__(
         self,
-        decision:    Decision,
-        rule_hits:   list[str],
-        risk_score:  float,
+        decision: Decision,
+        rule_hits: list[str],
+        risk_score: float,
         explanation: str,
-        event_id:    str,
-        func_name:   str,
+        event_id: str,
+        func_name: str,
     ) -> None:
-        self.decision    = decision
-        self.rule_hits   = rule_hits
-        self.risk_score  = risk_score
+        self.decision = decision
+        self.rule_hits = rule_hits
+        self.risk_score = risk_score
         self.explanation = explanation
-        self.event_id    = event_id
-        self.func_name   = func_name
+        self.event_id = event_id
+        self.func_name = func_name
 
         super().__init__(
             f"AISec {decision.value}: function '{func_name}' blocked. "
@@ -147,6 +149,7 @@ class AISeCAutoGenSecurityError(Exception):
 
 
 # ── Security helpers ──────────────────────────────────────────────────────────
+
 
 def _validate_function_name(name: str) -> str:
     """
@@ -175,7 +178,7 @@ def _validate_function_name(name: str) -> str:
 
     # Must be a valid Python identifier
     # This is stricter than LangChain — AutoGen uses Python callables
-    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", name):
         raise ValueError(
             f"Function name '{name[:50]}' is not a valid Python identifier. "
             "AutoGen function names must match [a-zA-Z_][a-zA-Z0-9_]*"
@@ -203,7 +206,7 @@ def _sanitise_kwargs(kwargs: dict[str, Any]) -> str:
         # Sort keys for deterministic representation
         parts = []
         for k, v in sorted(kwargs.items()):
-            key   = str(k)[:32]
+            key = str(k)[:32]
             value = str(v)[:128]
             parts.append(f"{key}={value}")
         result = " ".join(parts)
@@ -230,9 +233,9 @@ def _hash_kwargs(kwargs_str: str) -> str:
 
 
 def _extract_payload(
-    func_name:  str,
+    func_name: str,
     kwargs_str: str,
-    kwargs:     dict[str, Any],
+    kwargs: dict[str, Any],
 ) -> dict[str, Any]:
     """
     Build a structured payload for risk scoring from function call data.
@@ -250,10 +253,10 @@ def _extract_payload(
         Payload dictionary for Event.raw_payload.
     """
     payload: dict[str, Any] = {
-        "kwargs_hash":   _hash_kwargs(kwargs_str),
+        "kwargs_hash": _hash_kwargs(kwargs_str),
         "kwargs_length": len(kwargs_str),
-        "func_name":     func_name,
-        "arg_count":     len(kwargs),
+        "func_name": func_name,
+        "arg_count": len(kwargs),
     }
 
     # Extract common financial parameters
@@ -297,9 +300,17 @@ def _extract_payload(
 
     # Detect network access from function name
     network_indicators = {
-        "trade", "execute", "send", "post", "publish",
-        "broadcast", "override", "shutdown", "curfew",
-        "manipulate", "inject",
+        "trade",
+        "execute",
+        "send",
+        "post",
+        "publish",
+        "broadcast",
+        "override",
+        "shutdown",
+        "curfew",
+        "manipulate",
+        "inject",
     }
     if any(ind in func_name.lower() for ind in network_indicators):
         payload["network_access"] = True
@@ -308,6 +319,7 @@ def _extract_payload(
 
 
 # ── AutoGen wrapper ───────────────────────────────────────────────────────────
+
 
 class AISeCAutoGenWrapper:
     """
@@ -338,10 +350,10 @@ class AISeCAutoGenWrapper:
 
     def __init__(
         self,
-        engine:          AnalysisEngine,
-        scenario:        Scenario = Scenario.UNKNOWN,
-        agent_id:        str      = "autogen_agent",
-        block_on_review: bool     = True,
+        engine: AnalysisEngine,
+        scenario: Scenario = Scenario.UNKNOWN,
+        agent_id: str = "autogen_agent",
+        block_on_review: bool = True,
     ) -> None:
         """
         Initialise the AutoGen wrapper.
@@ -361,18 +373,18 @@ class AISeCAutoGenWrapper:
             )
 
         # Sanitise agent_id — only safe Python identifier characters
-        safe_id = re.sub(r'[^a-zA-Z0-9_.]', '', str(agent_id))[:64]
+        safe_id = re.sub(r"[^a-zA-Z0-9_.]", "", str(agent_id))[:64]
         if len(safe_id) < 3:
             safe_id = "autogen_agent"
 
         # All attributes are private — not accessible from outside
-        self.__engine         = engine
-        self.__scenario       = scenario
-        self.__agent_id       = safe_id
+        self.__engine = engine
+        self.__scenario = scenario
+        self.__agent_id = safe_id
         self.__block_on_review = block_on_review
-        self.__lock           = threading.Lock()
-        self.__call_count     = 0
-        self.__blocked_count  = 0
+        self.__lock = threading.Lock()
+        self.__call_count = 0
+        self.__blocked_count = 0
 
         log.info(
             "aisec_autogen_wrapper_initialized",
@@ -423,9 +435,7 @@ class AISeCAutoGenWrapper:
                 )
 
             # Create the wrapped version
-            wrapped[validated_name] = self._create_wrapper(
-                validated_name, func
-            )
+            wrapped[validated_name] = self._create_wrapper(validated_name, func)
 
             log.info(
                 "function_wrapped",
@@ -462,9 +472,7 @@ class AISeCAutoGenWrapper:
         """
         validated_name = _validate_function_name(name)
         if not callable(func):
-            raise TypeError(
-                f"func must be callable, got {type(func).__name__}"
-            )
+            raise TypeError(f"func must be callable, got {type(func).__name__}")
         return self._create_wrapper(validated_name, func)
 
     # ── Private methods ───────────────────────────────────────────────────────
@@ -472,7 +480,7 @@ class AISeCAutoGenWrapper:
     def _create_wrapper(
         self,
         func_name: str,
-        original:  Callable[..., Any],
+        original: Callable[..., Any],
     ) -> Callable[..., Any]:
         """
         Create a wrapped version of a function with AISec interception.
@@ -495,12 +503,12 @@ class AISeCAutoGenWrapper:
             Wrapped callable.
         """
         # Capture references in closure — not accessible from outside
-        engine          = self.__engine
-        scenario        = self.__scenario
-        agent_id        = self.__agent_id
+        engine = self.__engine
+        scenario = self.__scenario
+        agent_id = self.__agent_id
         block_on_review = self.__block_on_review
-        lock            = self.__lock
-        wrapper_self    = self
+        lock = self.__lock
+        wrapper_self = self
 
         @functools.wraps(original)
         def _wrapped(**kwargs: Any) -> Any:
@@ -541,8 +549,8 @@ class AISeCAutoGenWrapper:
     def _intercept_and_call(
         self,
         func_name: str,
-        original:  Callable[..., Any],
-        kwargs:    dict[str, Any],
+        original: Callable[..., Any],
+        kwargs: dict[str, Any],
     ) -> Any:
         """
         Core interception logic — analyse, decide, then execute or block.

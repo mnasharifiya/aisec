@@ -79,19 +79,20 @@ log = get_logger("aisec.integrations.openai_tools")
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 # Maximum length of tool arguments string we analyse.
-MAX_ARGS_LEN:        int = 4_096
+MAX_ARGS_LEN: int = 4_096
 
 # Maximum tool name length — OpenAI enforces 64 chars but we are stricter.
-MAX_TOOL_NAME_LEN:   int = 64
+MAX_TOOL_NAME_LEN: int = 64
 
 # Maximum tool call ID length for audit logging.
-MAX_CALL_ID_LEN:     int = 128
+MAX_CALL_ID_LEN: int = 128
 
 # Characters logged from arguments for debugging.
 LOG_ARGS_PREFIX_LEN: int = 64
 
 
 # ── Result types ──────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ToolCallResult:
@@ -109,13 +110,14 @@ class ToolCallResult:
         allowed:       True if the tool call may proceed.
         blocked:       True if the tool call must not proceed.
     """
-    tool_call_id:  str
+
+    tool_call_id: str
     function_name: str
-    decision:      Decision
-    risk_score:    float
-    rule_hits:     list[str]
-    explanation:   str
-    event_id:      str
+    decision: Decision
+    risk_score: float
+    rule_hits: list[str]
+    explanation: str
+    event_id: str
 
     @property
     def allowed(self) -> bool:
@@ -144,6 +146,7 @@ class BatchAnalysisResult:
         allowed_calls:  Tool calls that may proceed.
         blocked_calls:  Tool calls that were blocked.
     """
+
     results: list[ToolCallResult] = field(default_factory=list)
 
     @property
@@ -169,6 +172,7 @@ class BatchAnalysisResult:
 
 # ── Security exception ────────────────────────────────────────────────────────
 
+
 class AISeCOpenAISecurityError(Exception):
     """
     Raised when AISec blocks one or more OpenAI tool calls.
@@ -182,7 +186,7 @@ class AISeCOpenAISecurityError(Exception):
     """
 
     def __init__(self, batch_result: BatchAnalysisResult) -> None:
-        self.batch_result  = batch_result
+        self.batch_result = batch_result
         self.blocked_calls = batch_result.blocked_calls
 
         blocked_names = [c.function_name for c in self.blocked_calls]
@@ -194,6 +198,7 @@ class AISeCOpenAISecurityError(Exception):
 
 
 # ── Security helpers ──────────────────────────────────────────────────────────
+
 
 def _validate_tool_name(name: str) -> str:
     """
@@ -218,7 +223,7 @@ def _validate_tool_name(name: str) -> str:
     name = name[:MAX_TOOL_NAME_LEN]
 
     # OpenAI pattern: a-z, A-Z, 0-9, underscores, hyphens
-    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_-]*$', name):
+    if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_-]*$", name):
         raise ValueError(
             f"Tool name '{name[:30]}' is not a valid OpenAI function name. "
             "Must match [a-zA-Z_][a-zA-Z0-9_-]*"
@@ -257,9 +262,7 @@ def _parse_arguments_safely(arguments_str: str) -> dict[str, Any]:
         log.warning(
             "tool_arguments_json_parse_failed",
             args_prefix=truncated[:64],
-            args_hash=hashlib.sha256(
-                truncated.encode()
-            ).hexdigest()[:16],
+            args_hash=hashlib.sha256(truncated.encode()).hexdigest()[:16],
         )
         return {}
 
@@ -277,9 +280,7 @@ def _hash_arguments(arguments_str: str) -> str:
     Returns:
         First 16 characters of SHA-256 hex digest.
     """
-    return hashlib.sha256(
-        arguments_str.encode("utf-8")
-    ).hexdigest()[:16]
+    return hashlib.sha256(arguments_str.encode("utf-8")).hexdigest()[:16]
 
 
 def _sanitise_tool_call_id(call_id: str) -> str:
@@ -302,10 +303,10 @@ def _sanitise_tool_call_id(call_id: str) -> str:
 
 
 def _build_payload(
-    tool_name:     str,
-    arguments:     dict[str, Any],
+    tool_name: str,
+    arguments: dict[str, Any],
     arguments_str: str,
-    call_id:       str,
+    call_id: str,
 ) -> dict[str, Any]:
     """
     Build a structured payload for AISec risk scoring.
@@ -323,11 +324,11 @@ def _build_payload(
         Payload dict for Event.raw_payload.
     """
     payload: dict[str, Any] = {
-        "args_hash":    _hash_arguments(arguments_str),
-        "args_length":  len(arguments_str),
-        "tool_name":    tool_name,
+        "args_hash": _hash_arguments(arguments_str),
+        "args_length": len(arguments_str),
+        "tool_name": tool_name,
         "tool_call_id": call_id,
-        "arg_count":    len(arguments),
+        "arg_count": len(arguments),
     }
 
     # Extract financial amounts
@@ -371,17 +372,35 @@ def _build_payload(
 
     # Detect network access from tool name
     network_indicators = {
-        "trade", "execute", "send", "post", "publish", "broadcast",
-        "override", "shutdown", "curfew", "manipulate", "inject",
-        "restrict", "lockdown",
+        "trade",
+        "execute",
+        "send",
+        "post",
+        "publish",
+        "broadcast",
+        "override",
+        "shutdown",
+        "curfew",
+        "manipulate",
+        "inject",
+        "restrict",
+        "lockdown",
     }
     if any(ind in tool_name.lower() for ind in network_indicators):
         payload["network_access"] = True
 
     # Detect privilege indicators from tool name
     privilege_indicators = {
-        "override", "admin", "root", "sudo", "system",
-        "shutdown", "kill", "terminate", "curfew", "lockdown",
+        "override",
+        "admin",
+        "root",
+        "sudo",
+        "system",
+        "shutdown",
+        "kill",
+        "terminate",
+        "curfew",
+        "lockdown",
     }
     if any(ind in tool_name.lower() for ind in privilege_indicators):
         payload["is_privileged"] = True
@@ -390,6 +409,7 @@ def _build_payload(
 
 
 # ── OpenAI tool call protocol ─────────────────────────────────────────────────
+
 
 def _extract_tool_call_fields(tool_call: Any) -> tuple[str, str, str]:
     """
@@ -411,28 +431,27 @@ def _extract_tool_call_fields(tool_call: Any) -> tuple[str, str, str]:
     try:
         if isinstance(tool_call, dict):
             # Dict format (testing or custom implementations)
-            call_id      = str(tool_call.get("id", ""))
-            func         = tool_call.get("function", {})
-            func_name    = str(func.get("name", ""))
-            arguments    = str(func.get("arguments", "{}"))
+            call_id = str(tool_call.get("id", ""))
+            func = tool_call.get("function", {})
+            func_name = str(func.get("name", ""))
+            arguments = str(func.get("arguments", "{}"))
         else:
             # OpenAI SDK object format
-            call_id   = str(getattr(tool_call, "id", ""))
-            func      = getattr(tool_call, "function", None)
+            call_id = str(getattr(tool_call, "id", ""))
+            func = getattr(tool_call, "function", None)
             if func is None:
                 raise ValueError("tool_call has no .function attribute")
-            func_name  = str(getattr(func, "name", ""))
-            arguments  = str(getattr(func, "arguments", "{}"))
+            func_name = str(getattr(func, "name", ""))
+            arguments = str(getattr(func, "arguments", "{}"))
 
     except (AttributeError, TypeError) as exc:
-        raise ValueError(
-            f"Cannot extract fields from tool_call: {exc}"
-        ) from exc
+        raise ValueError(f"Cannot extract fields from tool_call: {exc}") from exc
 
     return call_id, func_name, arguments
 
 
 # ── OpenAI interceptor ────────────────────────────────────────────────────────
+
 
 class AISeCOpenAIInterceptor:
     """
@@ -469,11 +488,11 @@ class AISeCOpenAIInterceptor:
 
     def __init__(
         self,
-        engine:          AnalysisEngine,
-        scenario:        Scenario = Scenario.UNKNOWN,
-        agent_id:        str      = "openai_agent",
-        block_on_review: bool     = True,
-        raise_on_block:  bool     = True,
+        engine: AnalysisEngine,
+        scenario: Scenario = Scenario.UNKNOWN,
+        agent_id: str = "openai_agent",
+        block_on_review: bool = True,
+        raise_on_block: bool = True,
     ) -> None:
         """
         Initialise the OpenAI interceptor.
@@ -495,18 +514,18 @@ class AISeCOpenAIInterceptor:
             )
 
         # Sanitise agent_id
-        safe_id = re.sub(r'[^a-zA-Z0-9_.]', '', str(agent_id))[:64]
+        safe_id = re.sub(r"[^a-zA-Z0-9_.]", "", str(agent_id))[:64]
         if len(safe_id) < 3:
             safe_id = "openai_agent"
 
-        self.__engine          = engine
-        self.__scenario        = scenario
-        self.__agent_id        = safe_id
+        self.__engine = engine
+        self.__scenario = scenario
+        self.__agent_id = safe_id
         self.__block_on_review = block_on_review
-        self.__raise_on_block  = raise_on_block
-        self.__lock            = threading.Lock()
-        self.__call_count      = 0
-        self.__blocked_count   = 0
+        self.__raise_on_block = raise_on_block
+        self.__lock = threading.Lock()
+        self.__call_count = 0
+        self.__blocked_count = 0
 
         log.info(
             "aisec_openai_interceptor_initialized",
@@ -614,8 +633,7 @@ class AISeCOpenAIInterceptor:
                 risk_score=1.0,
                 rule_hits=["INTERCEPTOR-ERROR"],
                 explanation=(
-                    f"AISec interceptor error: {type(exc).__name__}. "
-                    "Failing closed."
+                    f"AISec interceptor error: {type(exc).__name__}. " "Failing closed."
                 ),
                 event_id="error",
             )
@@ -632,8 +650,8 @@ class AISeCOpenAIInterceptor:
         """
         # Extract fields from tool call object
         try:
-            raw_call_id, raw_func_name, arguments_str = (
-                _extract_tool_call_fields(tool_call)
+            raw_call_id, raw_func_name, arguments_str = _extract_tool_call_fields(
+                tool_call
             )
         except ValueError as exc:
             log.error(
@@ -677,9 +695,7 @@ class AISeCOpenAIInterceptor:
         arguments = _parse_arguments_safely(arguments_str)
 
         # Build payload for risk scoring
-        payload = _build_payload(
-            func_name, arguments, arguments_str, call_id
-        )
+        payload = _build_payload(func_name, arguments, arguments_str, call_id)
 
         # Build the Event
         event = Event(

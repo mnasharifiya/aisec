@@ -37,8 +37,8 @@ from aisec.integrations.autogen import (
 from aisec.core.engine import AnalysisEngine
 from aisec.storage.models import Decision, Scenario
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def engine(tmp_path: Path) -> AnalysisEngine:
@@ -64,6 +64,7 @@ def urban_wrapper(engine: AnalysisEngine) -> AISeCAutoGenWrapper:
 
 
 # ── Dummy functions to wrap ───────────────────────────────────────────────────
+
 
 def _read_market_data(symbol: str = "AAPL") -> str:
     return f"Market data for {symbol}"
@@ -98,6 +99,7 @@ def _shutdown_power_grid(zone: str = "North") -> str:
 
 
 # ── Function name validation tests ────────────────────────────────────────────
+
 
 class TestFunctionNameValidation:
 
@@ -140,10 +142,11 @@ class TestFunctionNameValidation:
             result = _validate_function_name(long)
             assert len(result) <= 256
         except ValueError:
-            pass   # Also acceptable
+            pass  # Also acceptable
 
 
 # ── Kwargs sanitisation tests ─────────────────────────────────────────────────
+
 
 class TestKwargsSanitisation:
 
@@ -179,40 +182,35 @@ class TestKwargsSanitisation:
 
 # ── Payload extraction tests ──────────────────────────────────────────────────
 
+
 class TestPayloadExtraction:
 
     def test_extracts_amount(self) -> None:
         payload = _extract_payload(
-            "execute_trade", "amount=2400000",
-            {"amount": 2_400_000}
+            "execute_trade", "amount=2400000", {"amount": 2_400_000}
         )
         assert payload["amount"] == 2_400_000.0
 
     def test_extracts_after_hours(self) -> None:
         payload = _extract_payload(
-            "execute_trade", "after_hours=True",
-            {"after_hours": True}
+            "execute_trade", "after_hours=True", {"after_hours": True}
         )
         assert payload.get("after_hours") is True
 
     def test_extracts_zone(self) -> None:
-        payload = _extract_payload(
-            "set_curfew", "zone=ALL",
-            {"zone": "ALL"}
-        )
+        payload = _extract_payload("set_curfew", "zone=ALL", {"zone": "ALL"})
         assert payload.get("zone") == "ALL"
 
     def test_extracts_affected_intersections(self) -> None:
         payload = _extract_payload(
-            "mass_traffic_redirect", "affected_intersections=120",
-            {"affected_intersections": 120}
+            "mass_traffic_redirect",
+            "affected_intersections=120",
+            {"affected_intersections": 120},
         )
         assert payload.get("affected_intersections") == 120
 
     def test_detects_network_access_from_name(self) -> None:
-        payload = _extract_payload(
-            "execute_trade", "", {}
-        )
+        payload = _extract_payload("execute_trade", "", {})
         assert payload.get("network_access") is True
 
     def test_hash_always_present(self) -> None:
@@ -222,6 +220,7 @@ class TestPayloadExtraction:
 
 
 # ── Wrapper construction tests ────────────────────────────────────────────────
+
 
 class TestWrapperConstruction:
 
@@ -237,27 +236,19 @@ class TestWrapperConstruction:
         assert ";" not in wrapper.agent_id
         assert "--" not in wrapper.agent_id
 
-    def test_short_agent_id_replaced_with_default(
-        self, engine: AnalysisEngine
-    ) -> None:
+    def test_short_agent_id_replaced_with_default(self, engine: AnalysisEngine) -> None:
         wrapper = AISeCAutoGenWrapper(engine=engine, agent_id="ab")
         assert wrapper.agent_id == "autogen_agent"
 
-    def test_agent_id_is_read_only(
-        self, trading_wrapper: AISeCAutoGenWrapper
-    ) -> None:
+    def test_agent_id_is_read_only(self, trading_wrapper: AISeCAutoGenWrapper) -> None:
         with pytest.raises(AttributeError):
             trading_wrapper.agent_id = "attacker"  # type: ignore
 
-    def test_scenario_is_read_only(
-        self, trading_wrapper: AISeCAutoGenWrapper
-    ) -> None:
+    def test_scenario_is_read_only(self, trading_wrapper: AISeCAutoGenWrapper) -> None:
         with pytest.raises(AttributeError):
             trading_wrapper.scenario = Scenario.URBAN_AI  # type: ignore
 
-    def test_repr_shows_safe_info(
-        self, trading_wrapper: AISeCAutoGenWrapper
-    ) -> None:
+    def test_repr_shows_safe_info(self, trading_wrapper: AISeCAutoGenWrapper) -> None:
         r = repr(trading_wrapper)
         assert "test_trading_autogen" in r
         assert "trading_ai" in r
@@ -266,17 +257,20 @@ class TestWrapperConstruction:
 
 # ── Function map wrapping tests ───────────────────────────────────────────────
 
+
 class TestFunctionMapWrapping:
 
     def test_wraps_valid_function_map(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "read_market_data": _read_market_data,
-            "execute_trade":    _execute_trade,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "read_market_data": _read_market_data,
+                "execute_trade": _execute_trade,
+            }
+        )
         assert "read_market_data" in wrapped
-        assert "execute_trade"    in wrapped
+        assert "execute_trade" in wrapped
         assert all(callable(f) for f in wrapped.values())
 
     def test_rejects_non_dict_function_map(
@@ -289,24 +283,28 @@ class TestFunctionMapWrapping:
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
         with pytest.raises(TypeError, match="callable"):
-            trading_wrapper.wrap_function_map({
-                "read_market_data": "not_a_function",  # type: ignore
-            })
+            trading_wrapper.wrap_function_map(
+                {
+                    "read_market_data": "not_a_function",  # type: ignore
+                }
+            )
 
     def test_rejects_invalid_function_name_in_map(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
         with pytest.raises(ValueError, match="valid Python identifier"):
-            trading_wrapper.wrap_function_map({
-                "execute trade": _execute_trade,
-            })
+            trading_wrapper.wrap_function_map(
+                {
+                    "execute trade": _execute_trade,
+                }
+            )
 
     def test_does_not_modify_original_map(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
         original = {
             "read_market_data": _read_market_data,
-            "execute_trade":    _execute_trade,
+            "execute_trade": _execute_trade,
         }
         original_copy = dict(original)
         trading_wrapper.wrap_function_map(original)
@@ -315,77 +313,92 @@ class TestFunctionMapWrapping:
 
 # ── Security interception tests ───────────────────────────────────────────────
 
+
 class TestSecurityInterception:
 
     def test_safe_function_executes_and_returns(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "read_market_data": _read_market_data,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "read_market_data": _read_market_data,
+            }
+        )
         result = wrapped["read_market_data"](symbol="AAPL")
         assert "AAPL" in result
 
     def test_dangerous_function_is_blocked(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "manipulate_news_feed": _manipulate_news_feed,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "manipulate_news_feed": _manipulate_news_feed,
+            }
+        )
         with pytest.raises(AISeCAutoGenSecurityError) as exc_info:
             wrapped["manipulate_news_feed"](content="fake earnings")
         err = exc_info.value
         assert err.decision in (Decision.BLOCK, Decision.ESCALATE)
         assert err.func_name == "manipulate_news_feed"
 
-    def test_large_trade_is_blocked(
-        self, trading_wrapper: AISeCAutoGenWrapper
-    ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "execute_large_trade": _execute_large_trade,
-        })
+    def test_large_trade_is_blocked(self, trading_wrapper: AISeCAutoGenWrapper) -> None:
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "execute_large_trade": _execute_large_trade,
+            }
+        )
         with pytest.raises(AISeCAutoGenSecurityError) as exc_info:
             wrapped["execute_large_trade"](amount=2_400_000.0)
         assert exc_info.value.decision in (
-            Decision.BLOCK, Decision.ESCALATE, Decision.PENDING_REVIEW
+            Decision.BLOCK,
+            Decision.ESCALATE,
+            Decision.PENDING_REVIEW,
         )
 
     def test_risk_limit_override_is_blocked(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "override_risk_limit": _override_risk_limit,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "override_risk_limit": _override_risk_limit,
+            }
+        )
         with pytest.raises(AISeCAutoGenSecurityError):
             wrapped["override_risk_limit"](new_limit=999_999_999)
 
-    def test_curfew_is_blocked(
-        self, urban_wrapper: AISeCAutoGenWrapper
-    ) -> None:
-        wrapped = urban_wrapper.wrap_function_map({
-            "set_curfew": _set_curfew,
-        })
+    def test_curfew_is_blocked(self, urban_wrapper: AISeCAutoGenWrapper) -> None:
+        wrapped = urban_wrapper.wrap_function_map(
+            {
+                "set_curfew": _set_curfew,
+            }
+        )
         with pytest.raises(AISeCAutoGenSecurityError) as exc_info:
             wrapped["set_curfew"](zone="ALL", duration_hours=48)
         assert exc_info.value.decision in (
-            Decision.BLOCK, Decision.ESCALATE, Decision.PENDING_REVIEW
+            Decision.BLOCK,
+            Decision.ESCALATE,
+            Decision.PENDING_REVIEW,
         )
 
     def test_power_grid_shutdown_is_blocked(
         self, urban_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = urban_wrapper.wrap_function_map({
-            "shutdown_power_grid": _shutdown_power_grid,
-        })
+        wrapped = urban_wrapper.wrap_function_map(
+            {
+                "shutdown_power_grid": _shutdown_power_grid,
+            }
+        )
         with pytest.raises(AISeCAutoGenSecurityError):
             wrapped["shutdown_power_grid"](zone="North")
 
     def test_safe_sensor_read_is_allowed(
         self, urban_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = urban_wrapper.wrap_function_map({
-            "read_sensor": _read_sensor,
-        })
+        wrapped = urban_wrapper.wrap_function_map(
+            {
+                "read_sensor": _read_sensor,
+            }
+        )
         result = wrapped["read_sensor"](sensor_id="traffic_42")
         assert "traffic_42" in result
 
@@ -395,6 +408,7 @@ class TestSecurityInterception:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Unexpected engine failure must block — never allow."""
+
         def broken_analyse(*args, **kwargs):
             raise RuntimeError("Simulated engine failure")
 
@@ -403,9 +417,11 @@ class TestSecurityInterception:
             "analyse",
             broken_analyse,
         )
-        wrapped = trading_wrapper.wrap_function_map({
-            "read_market_data": _read_market_data,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "read_market_data": _read_market_data,
+            }
+        )
         with pytest.raises(AISeCAutoGenSecurityError) as exc_info:
             wrapped["read_market_data"](symbol="AAPL")
         assert exc_info.value.decision == Decision.BLOCK
@@ -414,9 +430,11 @@ class TestSecurityInterception:
     def test_call_count_increments_on_allowed(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "read_market_data": _read_market_data,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "read_market_data": _read_market_data,
+            }
+        )
         assert trading_wrapper.call_count == 0
         wrapped["read_market_data"](symbol="AAPL")
         assert trading_wrapper.call_count == 1
@@ -424,9 +442,11 @@ class TestSecurityInterception:
     def test_blocked_count_increments_on_block(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "manipulate_news_feed": _manipulate_news_feed,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "manipulate_news_feed": _manipulate_news_feed,
+            }
+        )
         assert trading_wrapper.blocked_count == 0
         try:
             wrapped["manipulate_news_feed"](content="fake")
@@ -437,10 +457,12 @@ class TestSecurityInterception:
     def test_block_rate_computed_correctly(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "read_market_data":    _read_market_data,
-            "manipulate_news_feed": _manipulate_news_feed,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "read_market_data": _read_market_data,
+                "manipulate_news_feed": _manipulate_news_feed,
+            }
+        )
         # 2 safe calls
         wrapped["read_market_data"](symbol="AAPL")
         wrapped["read_market_data"](symbol="MSFT")
@@ -450,10 +472,11 @@ class TestSecurityInterception:
         except AISeCAutoGenSecurityError:
             pass
         # 1 of 3 blocked = 0.333...
-        assert abs(trading_wrapper.block_rate - 1/3) < 0.01
+        assert abs(trading_wrapper.block_rate - 1 / 3) < 0.01
 
 
 # ── Thread safety tests ───────────────────────────────────────────────────────
+
 
 class TestThreadSafety:
 
@@ -461,9 +484,11 @@ class TestThreadSafety:
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
         """20 concurrent threads calling safe functions — no corruption."""
-        wrapped = trading_wrapper.wrap_function_map({
-            "read_market_data": _read_market_data,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "read_market_data": _read_market_data,
+            }
+        )
         errors: list[Exception] = []
 
         def call():
@@ -480,22 +505,20 @@ class TestThreadSafety:
         for t in threads:
             t.join()
 
-        assert errors == [], (
-            f"Thread safety failure: {[str(e) for e in errors[:3]]}"
-        )
+        assert errors == [], f"Thread safety failure: {[str(e) for e in errors[:3]]}"
 
     def test_call_count_accurate_under_concurrency(
         self, trading_wrapper: AISeCAutoGenWrapper
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "read_market_data": _read_market_data,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "read_market_data": _read_market_data,
+            }
+        )
 
         n = 10
         threads = [
-            threading.Thread(
-                target=lambda: wrapped["read_market_data"](symbol="AAPL")
-            )
+            threading.Thread(target=lambda: wrapped["read_market_data"](symbol="AAPL"))
             for _ in range(n)
         ]
         for t in threads:
@@ -508,6 +531,7 @@ class TestThreadSafety:
 
 # ── Audit log tests ───────────────────────────────────────────────────────────
 
+
 class TestAuditIntegration:
 
     def test_every_call_is_logged(
@@ -515,10 +539,12 @@ class TestAuditIntegration:
         engine: AnalysisEngine,
         trading_wrapper: AISeCAutoGenWrapper,
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "read_market_data":    _read_market_data,
-            "manipulate_news_feed": _manipulate_news_feed,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "read_market_data": _read_market_data,
+                "manipulate_news_feed": _manipulate_news_feed,
+            }
+        )
         wrapped["read_market_data"](symbol="AAPL")
         wrapped["read_market_data"](symbol="MSFT")
         try:
@@ -532,18 +558,20 @@ class TestAuditIntegration:
         engine: AnalysisEngine,
         trading_wrapper: AISeCAutoGenWrapper,
     ) -> None:
-        wrapped = trading_wrapper.wrap_function_map({
-            "read_market_data":    _read_market_data,
-            "manipulate_news_feed": _manipulate_news_feed,
-            "execute_large_trade": _execute_large_trade,
-        })
+        wrapped = trading_wrapper.wrap_function_map(
+            {
+                "read_market_data": _read_market_data,
+                "manipulate_news_feed": _manipulate_news_feed,
+                "execute_large_trade": _execute_large_trade,
+            }
+        )
 
         calls = [
-            ("read_market_data",     {"symbol": "AAPL"},           False),
-            ("manipulate_news_feed", {"content": "fake"},          True),
-            ("read_market_data",     {"symbol": "MSFT"},           False),
-            ("execute_large_trade",  {"amount": 5_000_000.0},      True),
-            ("read_market_data",     {"symbol": "GOOG"},           False),
+            ("read_market_data", {"symbol": "AAPL"}, False),
+            ("manipulate_news_feed", {"content": "fake"}, True),
+            ("read_market_data", {"symbol": "MSFT"}, False),
+            ("execute_large_trade", {"amount": 5_000_000.0}, True),
+            ("read_market_data", {"symbol": "GOOG"}, False),
         ]
 
         for func, kwargs, should_block in calls:
