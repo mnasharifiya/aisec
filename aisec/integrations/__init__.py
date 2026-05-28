@@ -7,9 +7,9 @@ agent tool calls without modifying the agent's source code.
 
 Available integrations:
     langchain  — LangChain callback-based interceptor (v1)
+    autogen    — Microsoft AutoGen function_map interceptor (v1)
 
 Planned integrations (v2):
-    autogen    — Microsoft AutoGen tool interceptor
     crewai     — CrewAI agent interceptor
     openai     — OpenAI function-calling interceptor
 """
