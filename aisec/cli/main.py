@@ -13,10 +13,12 @@ from aisec.cli.soc import soc_command
 from aisec.utils.assets import LOGO, PORTRAIT
 from aisec.cli.stats import stats_command
 from aisec.cli.logs import logs_command
+from aisec.cli.serve import serve_command
+from aisec.cli.serve import serve_command
 
 console = Console()
 
-# Professional ASCII Shields
+#  ASCII Shields
 SHIELD_LOCK_ASCII = r"""
            .--------.
           / .------. \
@@ -186,6 +188,7 @@ cli.add_command(monitor_command)
 cli.add_command(soc_command)
 cli.add_command(stats_command)
 cli.add_command(logs_command)
+cli.add_command(serve_command)
 
 
 def main() -> None:
