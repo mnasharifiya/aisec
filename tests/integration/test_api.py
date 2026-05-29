@@ -17,8 +17,7 @@ import pytest
 # Crucial: Intercept pytest collection phase if FastAPI isn't installed.
 # This prevents ModuleNotFoundError crashes in unconfigured or minimal CI environments.
 pytest.importorskip(
-    "fastapi", 
-    reason="FastAPI and dependencies not installed in this execution target."
+    "fastapi", reason="FastAPI and dependencies not installed in this execution target."
 )
 
 from fastapi.testclient import TestClient
