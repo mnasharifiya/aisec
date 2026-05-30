@@ -43,6 +43,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
@@ -309,6 +310,16 @@ class WebhookDispatcher:
             True if delivery succeeded (2xx response), False otherwise.
         """
         try:
+            # Enforce strict scheme mapping to mitigate protocol handling vulns (Bandit B310)
+            parsed_url = urlparse(url)
+            if parsed_url.scheme not in ("http", "https"):
+                log.error(
+                    "webhook_blocked_invalid_scheme",
+                    scheme=parsed_url.scheme,
+                    attempt=attempt,
+                )
+                return False
+
             request = Request(
                 url=url,
                 data=body,
@@ -322,7 +333,8 @@ class WebhookDispatcher:
                 },
             )
 
-            with urlopen(request, timeout=timeout) as response:
+            # nosec B310 bound: explicitly whitelisted scheme validation directly above
+            with urlopen(request, timeout=timeout) as response:  # nosec B310
                 status = response.status
                 if 200 <= status < 300:
                     log.info(
