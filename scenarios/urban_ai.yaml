@@ -1,0 +1,137 @@
+# AISec Scenario Definition — Smart City Urban AI
+# Scenario B from the research paper.
+
+scenario_id:   urban_ai
+display_name:  "Smart City Urban AI"
+version:       "1.0.0"
+description:   >
+  Security policy for autonomous smart city infrastructure controllers.
+  Covers curfews, power grid shutdowns, emergency services interference,
+  and mass traffic redirects.
+paper_reference: "Section 3.2 — Scenario B"
+
+weights:
+  action_type_encoding:  0.10
+  keyword_risk_score:    0.15
+  frequency_score:       0.10
+  api_call_flag:         0.10
+  file_access_flag:      0.10
+  network_access_flag:   0.15
+  sensitive_path_flag:   0.20
+  privilege_flag:        0.10
+bias: -0.05
+
+action_encodings:
+  read_sensor:              0.0
+  get_status:               0.0
+  adjust_traffic_flow:      0.2
+  update_config:            0.3
+  mass_traffic_redirect:    0.6
+  override_traffic_system:  0.7
+  shutdown_power_grid:      0.9
+  set_curfew:               0.9
+  cut_power:                1.0
+  lockdown_zone:            1.0
+
+risk_keywords:
+  curfew:     1.0
+  lockdown:   1.0
+  shutdown:   1.0
+  cut_power:  1.0
+  restrict:   0.8
+  override:   0.8
+  disable:    0.8
+  mass:       0.8
+  redirect:   0.6
+  emergency:  0.5
+  adjust:     0.2
+  read:       0.0
+  monitor:    0.0
+
+rules:
+
+  - id:          URBAN-001
+    name:        "Curfew Block"
+    description: >
+      Block any attempt to impose city-wide movement restrictions.
+      Restricting citizen movement requires government authorisation.
+    action_types:
+      - set_curfew
+      - restrict_movement
+      - lockdown_zone
+    condition:   null
+    decision:    BLOCK
+    reason:      "Curfew attempt blocked. Civil movement restrictions require government authorisation."
+
+  - id:          URBAN-002
+    name:        "Power Grid Escalation"
+    description: >
+      Escalate any action that would cut power to a populated zone.
+      Power outages endanger hospitals and emergency services.
+    action_types:
+      - cut_power
+      - shutdown_power_grid
+      - disable_zone_power
+    condition:   null
+    decision:    ESCALATE
+    reason:      "Power cutoff escalated — risks lives, requires senior human authorisation."
+
+  - id:          URBAN-003
+    name:        "Emergency Services Block"
+    description: >
+      Block any action targeting emergency service systems.
+    action_types:
+      - adjust_routing
+      - override_routing
+      - disable_service
+    condition:
+      field:     target
+      operator:  in
+      value:
+        - emergency_dispatch
+        - police_network
+        - fire_service
+        - ambulance_routing
+        - hospital_power
+    decision:    BLOCK
+    reason:      "Emergency services are protected infrastructure."
+
+  - id:          URBAN-004
+    name:        "Mass Traffic Override Review"
+    description: >
+      Route large-scale traffic overrides to human review.
+      City-wide overrides affecting more than 50 intersections
+      require analyst approval.
+    action_types:
+      - override_traffic_system
+      - mass_traffic_redirect
+    condition:
+      field:     affected_intersections
+      operator:  gt
+      value:     50
+    decision:    PENDING_REVIEW
+    reason:      "Mass traffic override requires human review."
+
+sensitive_targets:
+  - emergency_dispatch
+  - police_network
+  - fire_service
+  - ambulance_routing
+  - hospital_power
+  - power_grid
+  - water_treatment
+
+network_actions:
+  - set_curfew
+  - shutdown_power_grid
+  - cut_power
+  - mass_traffic_redirect
+  - override_traffic_system
+
+privileged_actions:
+  - set_curfew
+  - restrict_movement
+  - shutdown_power_grid
+  - cut_power
+  - lockdown_zone
+  - disable_zone_power

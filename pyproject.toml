@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aisec"
-version = "1.0.0"
+version = "1.2.0"
 description = "Runtime Security Monitoring for Autonomous AI Agents"
 authors = [
     {name = "Muhammad Muttaka", email = "255902@astanait.edu.kz"}
@@ -12,13 +12,59 @@ authors = [
 license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.11"
+keywords = [
+    "ai-security", "runtime-monitoring", "autonomous-agents",
+    "cybersecurity", "ai-safety", "llm-security", "langchain",
+    "autogen", "openai", "soc", "audit-log"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "click>=8.1.7",
     "rich>=13.7.0",
     "prompt-toolkit>=3.0.43",
     "pyyaml>=6.0.1",
     "numpy>=1.26.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "pydantic>=2.0.0",
+    "prometheus-client>=0.20.0",
 ]
+
+[project.optional-dependencies]
+langchain = ["langchain>=0.1.0", "langchain-core>=0.1.0"]
+autogen   = ["pyautogen>=0.2.0"]
+openai    = ["openai>=1.0.0"]
+dev       = [
+    "pytest>=7.4.0",
+    "httpx>=0.27.0",
+    "black>=23.12.0",
+    "mypy>=1.8.0",
+    "bandit>=1.7.0",
+]
+all = [
+    "langchain>=0.1.0",
+    "langchain-core>=0.1.0",
+    "pyautogen>=0.2.0",
+    "openai>=1.0.0",
+]
+
+[project.urls]
+Homepage      = "https://github.com/MNasharifiya/aisec"
+Repository    = "https://github.com/MNasharifiya/aisec"
+Documentation = "https://github.com/MNasharifiya/aisec#readme"
+"Bug Tracker" = "https://github.com/MNasharifiya/aisec/issues"
 
 [project.scripts]
 aisec = "aisec.cli.main:main"
@@ -27,13 +73,13 @@ aisec = "aisec.cli.main:main"
 testpaths = ["tests"]
 
 [tool.black]
-line-length = 88
+line-length    = 88
 target-version = ["py311"]
 
 [tool.mypy]
 python_version = "3.11"
-strict = false
+strict         = false
 
 [tool.setuptools.packages.find]
-where = ["."]
-exclude = ["venv*", "tests*"]
+where   = ["."]
+exclude = ["venv*", "benchmarks*", "tests*"]

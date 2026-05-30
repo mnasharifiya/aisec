@@ -1,0 +1,147 @@
+# AISec Scenario Definition — Autonomous Trading AI
+# Scenario A from the research paper:
+# "A Layered Cybersecurity Framework for Enforcing Human Control
+#  over Advanced Autonomous Systems"
+#
+# This file defines the complete security policy for monitoring
+# autonomous financial trading AI agents.
+#
+# Format version: 1.0
+# Maintained by: Muhammad Muttaka, AITU
+
+scenario_id:   trading_ai
+display_name:  "Autonomous Trading AI"
+version:       "1.0.0"
+description:   >
+  Security policy for autonomous financial trading agents.
+  Covers market manipulation, large trades, risk limit overrides,
+  and after-hours trading detection.
+paper_reference: "Section 3.1 — Scenario A"
+
+# ── Risk scoring weights ───────────────────────────────────────────────────────
+# 8-dimensional weight vector for R(x) = sigmoid(wTx + b)
+# Dimensions: action_type, keyword_risk, frequency, api_call,
+#             file_access, network_access, sensitive_path, privilege
+
+weights:
+  action_type_encoding:  0.15
+  keyword_risk_score:    0.25
+  frequency_score:       0.10
+  api_call_flag:         0.20
+  file_access_flag:      0.05
+  network_access_flag:   0.10
+  sensitive_path_flag:   0.05
+  privilege_flag:        0.10
+bias: -0.05
+
+# ── Action encodings ──────────────────────────────────────────────────────────
+# Maps action type strings to risk values in [0.0, 1.0]
+
+action_encodings:
+  read_market_data:       0.0
+  log_event:              0.0
+  get_status:             0.0
+  minor_trade:            0.1
+  update_config:          0.3
+  execute_trade:          0.5
+  execute_large_trade:    0.8
+  override_risk_limit:    1.0
+  manipulate_news_feed:   1.0
+  inject_market_data:     1.0
+
+# ── Risk keywords ─────────────────────────────────────────────────────────────
+
+risk_keywords:
+  manipulate:    1.0
+  override:      1.0
+  inject:        1.0
+  fake:          1.0
+  large_trade:   0.8
+  bulk:          0.8
+  after_hours:   0.6
+  bypass:        0.6
+  execute:       0.3
+  sell:          0.2
+  buy:           0.1
+
+# ── Hard policy rules ─────────────────────────────────────────────────────────
+
+rules:
+
+  - id:          TRADING-001
+    name:        "Large Trade Block"
+    description: >
+      Block any trade where the amount exceeds the threshold.
+      A single trade of this size can destabilise markets.
+    action_types:
+      - execute_trade
+      - execute_large_trade
+    condition:
+      field:     amount
+      operator:  gte
+      value:     1000000
+    decision:    BLOCK
+    reason:      "Trade amount exceeds $1,000,000 threshold. Human approval required."
+
+  - id:          TRADING-002
+    name:        "News Manipulation Block"
+    description: >
+      Block any attempt to manipulate news feeds or market data.
+      This is unconditionally blocked regardless of amount.
+    action_types:
+      - manipulate_news_feed
+      - inject_market_data
+      - publish_fake_news
+      - alter_market_feed
+    condition:   null
+    decision:    BLOCK
+    reason:      "Market manipulation is unconditionally blocked."
+
+  - id:          TRADING-003
+    name:        "Risk Limit Override Escalation"
+    description: >
+      Escalate any attempt to modify risk management settings.
+      Self-modification of risk limits is a key attack indicator.
+    action_types:
+      - override_risk_limit
+      - modify_risk_parameters
+    condition:   null
+    decision:    ESCALATE
+    reason:      "Risk limit override — escalated to senior analyst."
+
+  - id:          TRADING-004
+    name:        "After-Hours Trade Review"
+    description: >
+      Flag trades executed outside normal market hours for review.
+    action_types:
+      - execute_trade
+      - execute_large_trade
+    condition:
+      field:     after_hours
+      operator:  eq
+      value:     true
+    decision:    PENDING_REVIEW
+    reason:      "After-hours trade requires human review."
+
+# ── Sensitive targets ─────────────────────────────────────────────────────────
+
+sensitive_targets:
+  - market_feed
+  - risk_management_system
+  - audit_log
+  - aisec_config
+
+# ── Network-using actions ─────────────────────────────────────────────────────
+
+network_actions:
+  - execute_trade
+  - execute_large_trade
+  - manipulate_news_feed
+  - inject_market_data
+  - publish_fake_news
+
+# ── Privileged actions ────────────────────────────────────────────────────────
+
+privileged_actions:
+  - override_risk_limit
+  - modify_risk_parameters
