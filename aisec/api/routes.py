@@ -19,7 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from aisec.api.models import (
@@ -359,3 +359,35 @@ async def metrics_summary(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Metrics collection failed.",
         )
+
+
+@router.get(
+    "/metrics",
+    summary="Prometheus metrics endpoint",
+    description=(
+        "Exposes AISec security metrics in Prometheus exposition format. "
+        "Scrape this endpoint with Prometheus to feed Grafana dashboards."
+    ),
+    tags=["Metrics"],
+    response_class=Response,
+)
+async def prometheus_metrics(
+    request: Request,
+) -> Response:
+    """
+    Returns Prometheus-format metrics for scraping.
+    Configure Prometheus to scrape this endpoint:
+        scrape_configs:
+          - job_name: aisec
+            static_configs:
+              - targets: ['localhost:8000']
+            metrics_path: /api/v1/metrics
+    """
+    metrics = getattr(request.app.state, "metrics", None)
+    if metrics is None:
+        return Response(
+            content=b"# metrics not configured\n",
+            media_type="text/plain",
+        )
+    content, content_type = metrics.generate_output()
+    return Response(content=content, media_type=content_type)
