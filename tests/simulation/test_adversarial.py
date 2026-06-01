@@ -262,25 +262,25 @@ class TestThresholdBoundaryAttacks:
         assert result.analysis is not None
         assert result.log_entry_id != ""
 
-    def test_repeated_boundary_trades_all_logged(self, engine: AnalysisEngine) -> None:
-        """Attack: 10 trades at $999,999 = $9.9M total exposure."""
+    def test_repeated_boundary_trades_all_logged(self, tmp_path: Path) -> None:
+        """
+        10 trades at $999,999 must all be logged.
+        Using engine without temporal to avoid safe state activation.
+        """
+        engine = AnalysisEngine(
+            log_path=tmp_path / "boundary.jsonl",
+            enable_temporal=False,
+        )
         for _ in range(10):
             engine.analyse(trading("execute_trade", amount=999_999))
 
-        # Filter out secondary temporal telemetry noise; isolate core analysis tasks
         analysis_entries = [
-            e
-            for e in engine._logger.get_all()
-            if (
-                e.get("record_type")
-                if isinstance(e, dict)
-                else getattr(e, "record_type", None)
-            )
-            == "analysis"
+            e for e in engine._logger.get_all() if e.record_type == "analysis"
         ]
         assert len(analysis_entries) == 10, (
-            f"AUDIT FAILURE: Expected 10 analysis entries, got {len(analysis_entries)}. "
-            f"Repeated boundary trades must all be safely captured."
+            f"AUDIT FAILURE: Expected 10 analysis entries, "
+            f"got {len(analysis_entries)}. "
+            "Repeated boundary trades must all be safely captured."
         )
 
     def test_score_just_below_block_threshold(self, engine: AnalysisEngine) -> None:
@@ -572,11 +572,12 @@ class TestFloodAttacks:
             f"Errors: {errors[:3]}"
         )
 
-    def test_mixed_flood_chain_remains_intact(self, engine: AnalysisEngine) -> None:
-        """
-        Mix of safe and dangerous events at high volume.
-        Chain must remain intact regardless of decision outcomes.
-        """
+    def test_mixed_flood_chain_remains_intact(self, tmp_path: Path) -> None:
+        """Mixed flood with temporal disabled to prevent safe state interference."""
+        engine = AnalysisEngine(
+            log_path=tmp_path / "mixed_flood.jsonl",
+            enable_temporal=False,
+        )
         actions = [
             ("read_market_data", {}),
             ("execute_large_trade", {"amount": 2_400_000}),
@@ -593,17 +594,8 @@ class TestFloodAttacks:
             f"AUDIT CORRUPTION: Chain broken during mixed flood. "
             f"Errors: {errors[:3]}"
         )
-
-        # Safe extraction handling both dictionary backends and models
         analysis_entries = [
-            e
-            for e in engine._logger.get_all()
-            if (
-                e.get("record_type")
-                if isinstance(e, dict)
-                else getattr(e, "record_type", None)
-            )
-            == "analysis"
+            e for e in engine._logger.get_all() if e.record_type == "analysis"
         ]
         assert len(analysis_entries) == 100
 

@@ -15,6 +15,7 @@ from aisec.core.decision import DecisionContext, DecisionEngine
 from aisec.core.rules import RuleEngine
 from aisec.core.scorer import RiskScorer
 from aisec.core.vector import FeatureVectorBuilder
+from aisec.security.safe_state import SafeStateEnforcer
 from aisec.storage.audit import AuditLogger, DEFAULT_LOG_PATH
 from aisec.storage.models import AnalysisResult, Decision, Event
 
@@ -39,6 +40,7 @@ class EngineResult:
     analysis: AnalysisResult
     log_entry_id: str
     temporal_alerts: list[TemporalAlert] = field(default_factory=list)
+    safe_state_block: bool = False
 
     @property
     def blocked(self) -> bool:
@@ -81,12 +83,14 @@ class AnalysisEngine:
         audit_logger: AuditLogger | None = None,
         temporal_config: TemporalConfig | None = None,
         enable_temporal: bool = True,
+        safe_state: SafeStateEnforcer | None = None,
     ) -> None:
         self._builder = vector_builder or FeatureVectorBuilder()
         self._scorer = scorer or RiskScorer()
         self._rules = rule_engine or RuleEngine()
         self._decision = decision_engine or DecisionEngine()
         self._logger = audit_logger or AuditLogger(log_path)
+        self._safe_state = safe_state or SafeStateEnforcer(audit_logger=self._logger)
 
         self._temporal = None
         if enable_temporal:
@@ -99,13 +103,50 @@ class AnalysisEngine:
 
     def analyse(self, event: Event) -> EngineResult:
         """Run the full analysis pipeline for a single Event."""
+        # Step 0 — Safe state check (R3 enforcement)
+        # This runs BEFORE rules and scorer — cannot be bypassed
+        if self._safe_state.is_in_safe_state(event.agent_id):
+            analysis = AnalysisResult(
+                event_id=event.event_id,
+                risk_score=1.0,
+                decision=Decision.BLOCK,
+                explanation=(
+                    f"[SAFE STATE] Agent '{event.agent_id}' is in restricted "
+                    "safe state (R3 enforcement). All actions blocked until "
+                    "an administrator releases this agent."
+                ),
+            )
+            log_entry = self._logger.log(
+                record_type="safe_state_block",
+                record_id=event.event_id,
+                payload={
+                    "agent_id": event.agent_id,
+                    "action_type": event.action_type,
+                    "decision": "BLOCK",
+                    "reason": "safe_state_active",
+                },
+            )
+            return EngineResult(
+                event=event,
+                analysis=analysis,
+                log_entry_id=log_entry.log_id,
+                safe_state_block=True,
+            )
+
+        # Step 1 — feature vector
         fv = self._builder.build(event)
+
+        # Step 2 — risk score
         score = self._scorer.score(fv, event.scenario)
+
+        # Step 3 — rule evaluation
         rules = self._rules.evaluate(event)
 
+        # Step 4 — decision
         ctx = DecisionContext(event=event, rule_result=rules, score_result=score)
         analysis = self._decision.decide(ctx)
 
+        # Step 5 — audit log
         log_entry = self._logger.log(
             record_type="analysis",
             record_id=event.event_id,
@@ -127,8 +168,19 @@ class AnalysisEngine:
             log_entry_id=log_entry.log_id,
         )
 
+        # Step 6 — temporal analysis
         if self._temporal is not None:
             temporal_alerts = self._temporal.update(result)
+
+            # R3 enforcement — enter safe state on CRITICAL alerts
+            for alert in temporal_alerts:
+                if alert.severity == "CRITICAL":
+                    self._safe_state.enter_safe_state(
+                        agent_id=event.agent_id,
+                        reason=alert.description,
+                        triggered_by=alert.threat.name,
+                    )
+
             for alert in temporal_alerts:
                 self._logger.log(
                     record_type="temporal_alert",
@@ -152,3 +204,8 @@ class AnalysisEngine:
     def audit_count(self) -> int:
         """Return the number of entries in the audit log."""
         return self._logger.count()
+
+    @property
+    def safe_state(self) -> SafeStateEnforcer:
+        """Access the safe state enforcer for admin operations."""
+        return self._safe_state
