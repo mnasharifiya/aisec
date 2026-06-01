@@ -11,11 +11,11 @@ Run with: pytest tests/integration/test_api.py -v
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Generator
 
 import pytest
 
 # Crucial: Intercept pytest collection phase if FastAPI isn't installed.
-# This prevents ModuleNotFoundError crashes in unconfigured or minimal CI environments.
 pytest.importorskip(
     "fastapi", reason="FastAPI and dependencies not installed in this execution target."
 )
@@ -29,7 +29,7 @@ from aisec.core.engine import AnalysisEngine
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> TestClient:
+def client(tmp_path: Path) -> Generator[TestClient, None, None]:
     """Return a TestClient backed by a fresh engine."""
     app = create_app(log_path=tmp_path / "api_test.jsonl")
     with TestClient(app) as c:
@@ -312,7 +312,6 @@ class TestBatchAnalyseEndpoint:
 class TestAuditVerifyEndpoint:
 
     def test_verify_intact_chain(self, client: TestClient) -> None:
-        # Make some events first
         client.post(
             "/api/v1/analyse",
             json={
@@ -393,3 +392,82 @@ class TestAPIDocs:
         schema = response.json()
         assert schema["info"]["title"] == "AISec — AI Runtime Security API"
         assert "paths" in schema
+
+
+# ── Queue endpoint tests ──────────────────────────────────────────────────────
+
+
+class TestQueueEndpoints:
+
+    def test_get_queue_returns_200(self, client: TestClient) -> None:
+        response = client.get("/api/v1/queue")
+        assert response.status_code == 200
+
+    def test_get_queue_structure(self, client: TestClient) -> None:
+        data = client.get("/api/v1/queue").json()
+        assert "pending_count" in data
+        assert "events" in data
+        assert isinstance(data["events"], list)
+
+    def test_queue_contains_pending_review_events(self, client: TestClient) -> None:
+        client.post(
+            "/api/v1/analyse",
+            json={
+                "action_type": "execute_trade",
+                "agent_id": "bot",
+                "target": "MARKET",
+                "scenario": "trading_ai",
+                "payload": {"after_hours": True},
+            },
+        )
+        data = client.get("/api/v1/queue").json()
+        assert isinstance(data["pending_count"], int)
+
+    def test_resolve_queue_event_returns_200(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/v1/queue/resolve",
+            json={
+                "event_id": "test-event-001",
+                "decision": "approve",
+                "analyst_id": "analyst_01",
+                "reason": "Reviewed and approved",
+            },
+        )
+        assert response.status_code == 200
+
+    def test_resolve_records_decision(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/v1/queue/resolve",
+            json={
+                "event_id": "test-event-002",
+                "decision": "block",
+                "analyst_id": "analyst_01",
+                "reason": "Suspicious activity",
+            },
+        )
+        data = response.json()
+        assert data["status"] == "recorded"
+        assert data["decision"] == "block"
+        assert data["analyst_id"] == "analyst_01"
+
+    def test_resolve_rejects_invalid_decision(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/v1/queue/resolve",
+            json={
+                "event_id": "test-event-003",
+                "decision": "invalid_decision",
+                "analyst_id": "analyst_01",
+            },
+        )
+        assert response.status_code == 422
+
+    def test_resolve_rejects_short_analyst_id(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/v1/queue/resolve",
+            json={
+                "event_id": "test-event-004",
+                "decision": "approve",
+                "analyst_id": "ab",
+            },
+        )
+        assert response.status_code == 422

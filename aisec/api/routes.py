@@ -34,6 +34,7 @@ from aisec.api.models import (
     MetricsSummaryResponse,
     QueueResponse,
     ResolveRequest,
+    TemporalAlertResponse,
 )
 from aisec.core.engine import AnalysisEngine
 from aisec.storage.models import Decision, Event, Scenario
@@ -358,6 +359,113 @@ async def metrics_summary(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Metrics collection failed.",
+        )
+
+
+@router.get(
+    "/queue",
+    summary="Get SOC review queue",
+    description=(
+        "Returns all events currently pending analyst review. "
+        "These are events with PENDING_REVIEW or ESCALATE decisions "
+        "that require human approval before the AI agent can proceed."
+    ),
+    tags=["SOC Queue"],
+)
+async def get_queue(
+    request: Request,
+) -> dict:
+    """
+    Returns the current SOC review queue.
+
+    In the API server, the queue is derived from the audit log —
+    events with PENDING_REVIEW decision that have not been resolved.
+    """
+    try:
+        engine = get_engine(request)
+        entries = engine._logger.get_all()
+
+        pending = [
+            {
+                "event_id": e.record_id,
+                "action_type": e.payload.get("action_type", ""),
+                "agent_id": e.payload.get("agent_id", ""),
+                "decision": e.payload.get("decision", ""),
+                "risk_score": e.payload.get("risk_score", 0.0),
+                "timestamp": e.timestamp,
+                "explanation": e.payload.get("explanation", ""),
+            }
+            for e in entries
+            if (
+                e.record_type == "analysis"
+                and e.payload.get("decision") == "PENDING_REVIEW"
+            )
+        ]
+
+        return {
+            "pending_count": len(pending),
+            "events": pending,
+        }
+    except Exception as exc:
+        log.error("queue_fetch_error", exc_type=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch queue.",
+        )
+
+
+@router.post(
+    "/queue/resolve",
+    summary="Record an analyst decision on a queued event",
+    description=(
+        "Records an analyst decision (approve/block/escalate) "
+        "for a PENDING_REVIEW event. "
+        "Every decision is written to the tamper-evident audit log."
+    ),
+    tags=["SOC Queue"],
+)
+async def resolve_queue_event(
+    body: ResolveRequest,
+    request: Request,
+) -> dict:
+    """
+    Record an analyst decision on a queued event.
+
+    The decision is logged to the audit trail with the analyst identity.
+    This endpoint enforces that analyst_id is at least 3 characters.
+    """
+    try:
+        engine = get_engine(request)
+
+        engine._logger.log(
+            record_type="analyst_decision",
+            record_id=body.event_id,
+            payload={
+                "analyst_id": body.analyst_id,
+                "analyst_decision": body.decision,
+                "reason": body.reason,
+                "event_id": body.event_id,
+            },
+        )
+
+        log.info(
+            "analyst_decision_recorded",
+            event_id=body.event_id,
+            analyst_id=body.analyst_id,
+            decision=body.decision,
+        )
+
+        return {
+            "status": "recorded",
+            "event_id": body.event_id,
+            "decision": body.decision,
+            "analyst_id": body.analyst_id,
+        }
+    except Exception as exc:
+        log.error("resolve_error", exc_type=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to record analyst decision.",
         )
 
 

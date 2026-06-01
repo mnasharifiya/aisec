@@ -122,6 +122,16 @@ class DecisionResponse(str, Enum):
     PENDING_REVIEW = "PENDING_REVIEW"
 
 
+class TemporalAlertResponse(BaseModel):
+    """Schema for temporal-based security alerts."""
+
+    event_id: str
+    alert_type: str
+    severity: str
+    timestamp: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 class AnalyseResponse(BaseModel):
     """Response body for POST /api/v1/analyse."""
 
@@ -135,7 +145,7 @@ class AnalyseResponse(BaseModel):
     log_entry_id: str
     blocked: bool
     requires_review: bool
-    temporal_alerts: list[dict[str, Any]] = []
+    temporal_alerts: list[TemporalAlertResponse] = []
 
 
 class BatchAnalyseResponse(BaseModel):

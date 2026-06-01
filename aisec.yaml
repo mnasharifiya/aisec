@@ -1,0 +1,69 @@
+# AISec Configuration File
+# All settings can be overridden via environment variables.
+# Format: AISEC_<SECTION>_<KEY> e.g. AISEC_ENGINE_LOG_PATH
+#
+# This file is loaded at startup. Changes require restart
+# unless hot-reload is enabled (see server.reload_config).
+
+# ── Engine settings ───────────────────────────────────────────────────────────
+engine:
+  log_path:        ".aisec/audit.jsonl"
+  enable_temporal: true
+
+# ── Decision thresholds ───────────────────────────────────────────────────────
+# Changing these affects the sensitivity of the risk scorer.
+# Lower block_threshold = more blocks (higher security, more false positives)
+# Higher block_threshold = fewer blocks (lower security, fewer false positives)
+thresholds:
+  block:   0.80   # Risk score >= this → BLOCK immediately
+  review:  0.60   # Risk score >= this → PENDING_REVIEW
+  watch:   0.30   # Risk score >= this → ALLOW with monitoring
+
+# ── Temporal anomaly detection ────────────────────────────────────────────────
+temporal:
+  window_seconds:               60.0
+  burst_threshold:              20
+  probe_threshold:              5
+  escalation_delta:             0.15
+  escalation_min_events:        5
+  cumulative_amount_threshold:  5000000.0
+  evasion_threshold:            2
+
+# ── API server ────────────────────────────────────────────────────────────────
+api:
+  host:          "127.0.0.1"
+  port:          8000
+  enable_cors:   true
+  allowed_origins:
+    - "*"
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level:  "INFO"     # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  output: "stderr"   # stderr or stdout
+
+# ── Webhooks ──────────────────────────────────────────────────────────────────
+# Add webhook endpoints to receive real-time security alerts.
+# Each webhook requires a URL and a secret (min 32 chars).
+# Set AISEC_WEBHOOK_SECRET_<NAME> env var for secrets in production.
+webhooks: []
+# Example:
+# webhooks:
+#   - url:     "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+#     secret:  "${AISEC_WEBHOOK_SECRET_SLACK}"
+#     events:  ["action_blocked"]
+#   - url:     "https://your-siem.corp.com/aisec/events"
+#     secret:  "${AISEC_WEBHOOK_SECRET_SIEM}"
+#     events:  []   # empty = all events
+
+# ── Scenarios ─────────────────────────────────────────────────────────────────
+# Additional scenario YAML files to load at startup.
+# Built-in scenarios (trading_ai, urban_ai) are always loaded.
+scenarios:
+  directory: "scenarios"
+  load_all:  true
+
+# ── Safe state ────────────────────────────────────────────────────────────────
+safe_state:
+  auto_enter_on_critical: true   # Enter safe state on CRITICAL temporal alerts
+  require_admin_release:  true   # Only admins can release agents from safe state
