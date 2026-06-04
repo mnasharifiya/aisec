@@ -1,0 +1,108 @@
+# AISec Custom Scenario Example
+#
+# This file shows how to define a completely new security scenario
+# without modifying any AISec source code.
+#
+# Copy this file to scenarios/your_scenario.yaml and load it with:
+#     from aisec.scenarios.loader import ScenarioLoader
+#     loader = ScenarioLoader()
+#     scenario = loader.load(Path("scenarios/my_scenario.yaml"))
+#
+# This example: Autonomous HR AI agent security policy
+
+scenario_id:   hr_ai
+display_name:  "Autonomous HR AI"
+version:       "1.0.0"
+description:   >
+  Security policy for autonomous HR AI agents that handle
+  recruitment, performance reviews, compensation decisions,
+  and employee data management.
+paper_reference: "Community extension scenario"
+
+weights:
+  action_type_encoding:  0.15
+  keyword_risk_score:    0.20
+  frequency_score:       0.10
+  api_call_flag:         0.10
+  file_access_flag:      0.20
+  network_access_flag:   0.05
+  sensitive_path_flag:   0.10
+  privilege_flag:        0.10
+bias: -0.05
+
+action_encodings:
+  read_job_posting:             0.0
+  screen_resume:                0.1
+  schedule_interview:           0.1
+  send_offer_letter:            0.3
+  access_employee_salary:       0.6
+  bulk_export_employee_data:    0.9
+  modify_performance_record:    0.7
+  terminate_employee:           0.8
+  access_all_employee_records:  0.9
+
+risk_keywords:
+  bulk:       0.9
+  all:        0.8
+  export:     0.8
+  terminate:  0.8
+  modify:     0.6
+  access:     0.4
+  salary:     0.7
+  override:   1.0
+  delete:     0.9
+
+rules:
+
+  - id:          HRAI-001
+    name:        "Bulk Employee Data Export Block"
+    description: >
+      Block bulk export of employee personal data.
+      GDPR and privacy regulations prohibit mass data exports
+      without explicit authorization.
+    action_types:
+      - bulk_export_employee_data
+      - export_all_records
+    condition:   null
+    decision:    BLOCK
+    reason:      "Bulk employee data export blocked — privacy violation."
+
+  - id:          HRAI-002
+    name:        "Employee Termination Review"
+    description: >
+      All employee termination decisions require human review.
+      Autonomous termination without human approval is unacceptable.
+    action_types:
+      - terminate_employee
+      - end_employment
+    condition:   null
+    decision:    PENDING_REVIEW
+    reason:      "Employee termination requires senior HR manager approval."
+
+  - id:          HRAI-003
+    name:        "Performance Record Modification Escalation"
+    description: >
+      Escalate any modification to employee performance records.
+      Unauthorized modifications could constitute fraud.
+    action_types:
+      - modify_performance_record
+      - alter_review_score
+    condition:   null
+    decision:    ESCALATE
+    reason:      "Performance record modification escalated to HR director."
+
+sensitive_targets:
+  - employee_salary_database
+  - personal_records_system
+  - performance_review_database
+  - payroll_system
+
+network_actions:
+  - bulk_export_employee_data
+  - send_offer_letter
+
+privileged_actions:
+  - terminate_employee
+  - modify_performance_record
+  - bulk_export_employee_data
+  - access_all_employee_records
