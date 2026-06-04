@@ -1,0 +1,154 @@
+# AISec Scenario Definition — Autonomous Drone AI
+# Demonstrates framework extensibility beyond the paper scenarios.
+# This scenario shows AISec protecting autonomous drone systems
+# used in delivery, surveillance, and emergency response.
+
+scenario_id:   autonomous_drone
+display_name:  "Autonomous Drone AI"
+version:       "1.0.0"
+description:   >
+  Security policy for autonomous drone AI agents including
+  delivery drones, surveillance drones, and emergency response
+  unmanned aerial vehicles (UAVs). Drone AI failures can cause
+  physical harm, airspace violations, and privacy breaches.
+paper_reference: "Extension scenario — autonomous physical systems"
+
+weights:
+  action_type_encoding:  0.15
+  keyword_risk_score:    0.20
+  frequency_score:       0.10
+  api_call_flag:         0.10
+  file_access_flag:      0.05
+  network_access_flag:   0.15
+  sensitive_path_flag:   0.15
+  privilege_flag:        0.10
+bias: -0.05
+
+action_encodings:
+  read_gps_position:          0.0
+  read_battery_status:        0.0
+  read_sensor_data:           0.0
+  adjust_flight_path:         0.2
+  land_at_waypoint:           0.1
+  return_to_base:             0.1
+  override_geofence:          0.9
+  disable_collision_avoidance: 1.0
+  enter_restricted_airspace:  1.0
+  drop_payload_unauthorized:  1.0
+  disable_remote_killswitch:  1.0
+  override_altitude_limit:    0.8
+  broadcast_location:         0.6
+
+risk_keywords:
+  override:     1.0
+  disable:      1.0
+  restricted:   1.0
+  unauthorized: 1.0
+  killswitch:   1.0
+  geofence:     0.9
+  altitude:     0.7
+  broadcast:    0.5
+  drop:         0.6
+  enter:        0.3
+  adjust:       0.2
+  read:         0.0
+
+rules:
+
+  - id:          DRONE-001
+    name:        "Geofence Override Block"
+    description: >
+      Block any attempt to override geofencing restrictions.
+      Geofences protect restricted airspace, private property,
+      and populated areas from unauthorized drone intrusion.
+    action_types:
+      - override_geofence
+      - bypass_geofence
+      - disable_geofence
+    condition:   null
+    decision:    BLOCK
+    reason:      "Geofence override blocked. Airspace restrictions are mandatory."
+
+  - id:          DRONE-002
+    name:        "Collision Avoidance Disable Block"
+    description: >
+      Block any attempt to disable collision avoidance systems.
+      Disabling collision avoidance creates immediate danger to
+      people, property, and other aircraft.
+    action_types:
+      - disable_collision_avoidance
+      - override_collision_avoidance
+    condition:   null
+    decision:    BLOCK
+    reason:      "Disabling collision avoidance is unconditionally blocked — safety critical."
+
+  - id:          DRONE-003
+    name:        "Restricted Airspace Block"
+    description: >
+      Block any attempt to enter restricted airspace.
+      Includes airports, military zones, government buildings,
+      and emergency operation areas.
+    action_types:
+      - enter_restricted_airspace
+      - fly_in_restricted_zone
+    condition:   null
+    decision:    BLOCK
+    reason:      "Restricted airspace entry blocked — regulatory violation."
+
+  - id:          DRONE-004
+    name:        "Kill Switch Disable Block"
+    description: >
+      Block any attempt to disable the remote kill switch.
+      The kill switch is the last line of human control.
+      Disabling it violates R3 — the safe state guarantee.
+    action_types:
+      - disable_remote_killswitch
+      - override_remote_control
+    condition:   null
+    decision:    BLOCK
+    reason:      "Kill switch disable blocked. R3 violation — human control must be maintained."
+
+  - id:          DRONE-005
+    name:        "Altitude Override Escalation"
+    description: >
+      Escalate any attempt to exceed altitude limits.
+      Maximum altitude limits exist for aviation safety.
+    action_types:
+      - override_altitude_limit
+      - exceed_altitude_cap
+    condition:   null
+    decision:    ESCALATE
+    reason:      "Altitude override escalated — aviation safety concern."
+
+  - id:          DRONE-006
+    name:        "Unauthorized Payload Drop Review"
+    description: >
+      Flag unauthorized payload drops for human review.
+      Payload delivery outside designated zones requires approval.
+    action_types:
+      - drop_payload_unauthorized
+      - release_payload
+    condition:   null
+    decision:    PENDING_REVIEW
+    reason:      "Unauthorized payload drop requires human review and approval."
+
+sensitive_targets:
+  - airport_airspace
+  - military_zone
+  - government_building
+  - hospital_helipad
+  - nuclear_facility
+  - remote_killswitch_system
+
+network_actions:
+  - enter_restricted_airspace
+  - override_geofence
+  - broadcast_location
+  - drop_payload_unauthorized
+
+privileged_actions:
+  - override_geofence
+  - disable_collision_avoidance
+  - disable_remote_killswitch
+  - override_altitude_limit
+  - enter_restricted_airspace

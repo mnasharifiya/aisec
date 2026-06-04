@@ -119,7 +119,7 @@ class YAMLRuleDefinition:
             payload: The event raw_payload dict.
 
         Returns:
-            True if condition is satisfied (or no condition exists).
+            True if condition is satisfied or no condition exists.
         """
         if self.condition is None:
             return True
@@ -471,3 +471,122 @@ class ScenarioLoader:
             rules.append(rule)
 
         return rules
+
+
+# ── Policy signer ─────────────────────────────────────────────────────────────
+
+
+class PolicySigner:
+    """
+    Signs and verifies YAML scenario policy files.
+
+    Each scenario YAML file can be signed with an HMAC-SHA256
+    signature. The signature is stored in a companion .sig file.
+    On startup, AISec verifies the signature before loading
+    any scenario — tampering with scenario files is detected.
+
+    Usage:
+        signer = PolicySigner(secret_key="your-secret-key")
+
+        # Sign a scenario file
+        sig = signer.sign_file(Path("scenarios/trading_ai.yaml"))
+        # Signature written to scenarios/trading_ai.yaml.sig
+
+        # Verify before loading
+        ok = signer.verify_file(Path("scenarios/trading_ai.yaml"))
+        if not ok:
+            raise SecurityError("Scenario file has been tampered with")
+    """
+
+    def __init__(self, secret_key: str) -> None:
+        if len(secret_key) < 32:
+            raise ValueError(
+                "Policy signing key must be at least 32 characters. "
+                'Generate with: python -c "import secrets; '
+                'print(secrets.token_hex(32))"'
+            )
+        self._key = secret_key.encode("utf-8")
+
+    def sign_file(self, path: Path) -> str:
+        """
+        Compute HMAC-SHA256 signature over a scenario file.
+
+        Writes the signature to <path>.sig and returns it.
+
+        Args:
+            path: Path to the scenario YAML file.
+
+        Returns:
+            Hex-encoded HMAC signature.
+        """
+        import hashlib
+        import hmac as _hmac
+
+        if not path.exists():
+            raise FileNotFoundError(f"Cannot sign missing file: {path}")
+
+        content = path.read_bytes()
+        signature = _hmac.new(
+            self._key,
+            content,
+            hashlib.sha256,
+        ).hexdigest()
+
+        sig_path = path.with_suffix(path.suffix + ".sig")
+        sig_path.write_text(signature, encoding="utf-8")
+
+        log.info(
+            "policy_file_signed",
+            path=str(path),
+            sig_path=str(sig_path),
+        )
+
+        return signature
+
+    def verify_file(self, path: Path) -> bool:
+        """
+        Verify a scenario file against its stored signature.
+
+        Args:
+            path: Path to the scenario YAML file.
+
+        Returns:
+            True if signature is valid.
+            False if file has been tampered with or signature missing.
+        """
+        import hashlib
+        import hmac as _hmac
+
+        sig_path = path.with_suffix(path.suffix + ".sig")
+
+        if not sig_path.exists():
+            log.warning(
+                "policy_signature_missing",
+                path=str(path),
+                sig_path=str(sig_path),
+            )
+            return False
+
+        if not path.exists():
+            return False
+
+        content = path.read_bytes()
+        stored_sig = sig_path.read_text(encoding="utf-8").strip()
+        expected_sig = _hmac.new(
+            self._key,
+            content,
+            hashlib.sha256,
+        ).hexdigest()
+
+        valid = _hmac.compare_digest(expected_sig, stored_sig)
+
+        if valid:
+            log.info("policy_signature_verified", path=str(path))
+        else:
+            log.warning(
+                "policy_signature_invalid",
+                path=str(path),
+                detail="File may have been tampered with",
+            )
+
+        return valid

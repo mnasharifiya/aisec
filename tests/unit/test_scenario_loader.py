@@ -378,3 +378,126 @@ class TestYAMLRuleDefinition:
         )
         assert rule.evaluate_condition({}) is True
         assert rule.evaluate_condition({"any": "data"}) is True
+
+
+# ── Policy signing tests ─────────────────────────────────────────────────────
+
+
+class TestPolicySigner:
+
+    def test_sign_and_verify_unmodified_file(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from aisec.scenarios.loader import PolicySigner
+
+        path = _write_scenario(tmp_path, _valid_scenario())
+
+        signer = PolicySigner(secret_key="a" * 32)
+        signer.sign_file(path)
+
+        assert signer.verify_file(path) is True
+
+    def test_verify_fails_after_modification(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from aisec.scenarios.loader import PolicySigner
+
+        path = _write_scenario(tmp_path, _valid_scenario())
+
+        signer = PolicySigner(secret_key="a" * 32)
+        signer.sign_file(path)
+
+        # Tamper with the file after signing.
+        path.write_text(
+            path.read_text(encoding="utf-8") + "\n# tampered\n",
+            encoding="utf-8",
+        )
+
+        assert signer.verify_file(path) is False
+
+    def test_verify_returns_false_when_sig_missing(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from aisec.scenarios.loader import PolicySigner
+
+        path = _write_scenario(tmp_path, _valid_scenario())
+
+        signer = PolicySigner(secret_key="a" * 32)
+
+        assert signer.verify_file(path) is False
+
+    def test_rejects_short_key(self) -> None:
+        from aisec.scenarios.loader import PolicySigner
+
+        with pytest.raises(ValueError, match="32 characters"):
+            PolicySigner(secret_key="short")
+
+    def test_different_keys_different_signatures(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from aisec.scenarios.loader import PolicySigner
+
+        path = _write_scenario(tmp_path, _valid_scenario())
+
+        signer1 = PolicySigner(secret_key="a" * 32)
+        signer2 = PolicySigner(secret_key="b" * 32)
+
+        sig1 = signer1.sign_file(path)
+        sig2 = signer2.sign_file(path)
+
+        assert sig1 != sig2
+
+
+# ── Drone scenario tests ─────────────────────────────────────────────────────
+
+
+class TestDroneScenario:
+
+    def test_loads_drone_scenario(
+        self,
+        loader: ScenarioLoader,
+    ) -> None:
+        path = Path("scenarios") / "autonomous_drone.yaml"
+
+        if not path.exists():
+            pytest.skip("scenarios/autonomous_drone.yaml not found")
+
+        scenario = loader.load(path)
+
+        assert scenario.scenario_id == "autonomous_drone"
+        assert len(scenario.rules) >= 6
+
+    def test_drone_geofence_rule_present(
+        self,
+        loader: ScenarioLoader,
+    ) -> None:
+        path = Path("scenarios") / "autonomous_drone.yaml"
+
+        if not path.exists():
+            pytest.skip("scenarios/autonomous_drone.yaml not found")
+
+        scenario = loader.load(path)
+        rule_ids = [rule.id for rule in scenario.rules]
+
+        assert "DRONE-001" in rule_ids
+        assert "DRONE-004" in rule_ids  # Kill switch
+
+    def test_drone_killswitch_rule_blocks(
+        self,
+        loader: ScenarioLoader,
+    ) -> None:
+        path = Path("scenarios") / "autonomous_drone.yaml"
+
+        if not path.exists():
+            pytest.skip("scenarios/autonomous_drone.yaml not found")
+
+        scenario = loader.load(path)
+
+        ks_rules = [rule for rule in scenario.rules if rule.id == "DRONE-004"]
+
+        assert len(ks_rules) == 1
+        assert ks_rules[0].decision == "BLOCK"
