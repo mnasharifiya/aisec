@@ -9,12 +9,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from aisec.core.decision import DecisionContext, DecisionEngine
 from aisec.core.rules import RuleEngine
 from aisec.core.scorer import RiskScorer
 from aisec.core.vector import FeatureVectorBuilder
+from aisec.security.correlation import (
+    CorrelationConfig,
+    MultiAgentCorrelationDetector,
+)
 from aisec.security.safe_state import SafeStateEnforcer
 from aisec.storage.audit import AuditLogger, DEFAULT_LOG_PATH
 from aisec.storage.models import AnalysisResult, Decision, Event
@@ -26,6 +30,8 @@ if TYPE_CHECKING:
         TemporalAnomalyDetector,
         TemporalConfig,
     )
+    from aisec.security.correlation import CorrelationAlert
+
 
 # ── Engine result ─────────────────────────────────────────────────────────────
 
@@ -40,6 +46,7 @@ class EngineResult:
     analysis: AnalysisResult
     log_entry_id: str
     temporal_alerts: list[TemporalAlert] = field(default_factory=list)
+    correlation_alerts: list[CorrelationAlert] = field(default_factory=list)
     safe_state_block: bool = False
 
     @property
@@ -84,6 +91,8 @@ class AnalysisEngine:
         temporal_config: TemporalConfig | None = None,
         enable_temporal: bool = True,
         safe_state: SafeStateEnforcer | None = None,
+        correlation_config: CorrelationConfig | None = None,
+        enable_correlation: bool = True,
     ) -> None:
         self._builder = vector_builder or FeatureVectorBuilder()
         self._scorer = scorer or RiskScorer()
@@ -92,13 +101,19 @@ class AnalysisEngine:
         self._logger = audit_logger or AuditLogger(log_path)
         self._safe_state = safe_state or SafeStateEnforcer(audit_logger=self._logger)
 
-        self._temporal = None
+        self._temporal: TemporalAnomalyDetector | None = None
         if enable_temporal:
             # Deferred import to break circular dependency
             from aisec.core.temporal import TemporalAnomalyDetector, TemporalConfig
 
             self._temporal = TemporalAnomalyDetector(
                 temporal_config or TemporalConfig()
+            )
+
+        self._correlation: MultiAgentCorrelationDetector | None = None
+        if enable_correlation:
+            self._correlation = MultiAgentCorrelationDetector(
+                correlation_config or CorrelationConfig()
             )
 
     def analyse(self, event: Event) -> EngineResult:
@@ -195,6 +210,39 @@ class AnalysisEngine:
                 )
             result.temporal_alerts = temporal_alerts
 
+        # Step 7 — multi-agent correlation analysis
+        # Non-blocking in v1/v2: correlation alerts are logged and attached
+        # to the EngineResult, but they do not directly override the base
+        # decision. Future policy layers may escalate REVIEW/BLOCK/SAFE_STATE.
+        if self._correlation is not None:
+            correlation_alerts = self._correlation.update(
+                agent_id=event.agent_id,
+                action_type=event.action_type,
+                risk_score=analysis.risk_score,
+                was_blocked=result.blocked,
+                amount=self._extract_amount(event.raw_payload),
+                target=event.target,
+            )
+
+            for alert in correlation_alerts:
+                self._logger.log(
+                    record_type="correlation_alert",
+                    record_id=event.event_id,
+                    payload={
+                        "agent_id": event.agent_id,
+                        "threat": alert.threat.value,
+                        "severity": alert.severity.value,
+                        "recommended_action": alert.recommended_action.value,
+                        "correlation_score": alert.correlation_score,
+                        "agents": alert.agents,
+                        "description": alert.description,
+                        "evidence": alert.evidence,
+                        "fingerprint": alert.fingerprint,
+                    },
+                )
+
+            result.correlation_alerts = correlation_alerts
+
         return result
 
     def verify_audit_chain(self) -> tuple[bool, list[str]]:
@@ -209,3 +257,24 @@ class AnalysisEngine:
     def safe_state(self) -> SafeStateEnforcer:
         """Access the safe state enforcer for admin operations."""
         return self._safe_state
+
+    @property
+    def correlation(self) -> MultiAgentCorrelationDetector | None:
+        """Access the multi-agent correlation detector."""
+        return self._correlation
+
+    @staticmethod
+    def _extract_amount(raw_payload: Any) -> float:
+        """
+        Extract amount from raw payload safely.
+
+        Correlation analysis should never crash the main engine if payload
+        data is missing or malformed.
+        """
+        if not isinstance(raw_payload, dict):
+            return 0.0
+
+        try:
+            return float(raw_payload.get("amount", 0.0))
+        except (TypeError, ValueError):
+            return 0.0
