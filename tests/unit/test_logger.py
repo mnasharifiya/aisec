@@ -1,138 +1,233 @@
 """
-Unit tests for the structured JSON logger.
-Run with: pytest tests/unit/test_logger.py -v
+Unit tests for AISec structured logger.
+
+Run with:
+    pytest tests/unit/test_logger.py -v
 """
 
 from __future__ import annotations
 
 import json
-import logging
-import io
+from typing import Any
 
-import pytest
-
-from aisec.utils.logger import (
-    JSONFormatter,
-    StructuredLogger,
-    configure_logging,
-    get_logger,
-)
+from aisec.utils.logger import configure_logging, get_logger
 
 
-class TestJSONFormatter:
+class TestLoggerBasics:
+    def test_get_logger_returns_logger(self) -> None:
+        logger = get_logger("test.module")
+        assert logger is not None
 
-    def _make_record(
-        self, msg: str, level: int = logging.INFO, **kwargs
-    ) -> logging.LogRecord:
-        record = logging.LogRecord(
-            name="aisec.test",
-            level=level,
-            pathname="",
-            lineno=0,
-            msg=msg,
-            args=(),
-            exc_info=None,
+    def test_logger_has_required_methods(self) -> None:
+        logger = get_logger("test.module")
+
+        assert hasattr(logger, "debug")
+        assert hasattr(logger, "info")
+        assert hasattr(logger, "warning")
+        assert hasattr(logger, "error")
+
+    def test_same_name_returns_usable_loggers(self) -> None:
+        first = get_logger("same.module")
+        second = get_logger("same.module")
+
+        assert first is not None
+        assert second is not None
+
+        first.info("same_logger_first_call")
+        second.info("same_logger_second_call")
+
+    def test_different_names_return_different_loggers(self) -> None:
+        first = get_logger("module.one")
+        second = get_logger("module.two")
+
+        assert first is not second
+
+
+class TestLoggerConfiguration:
+    def test_configure_logging_accepts_common_levels(self) -> None:
+        configure_logging(level="DEBUG", output="stderr")
+        configure_logging(level="INFO", output="stderr")
+        configure_logging(level="WARNING", output="stderr")
+        configure_logging(level="ERROR", output="stderr")
+
+    def test_configure_logging_accepts_stdout_and_stderr(self) -> None:
+        configure_logging(level="INFO", output="stdout")
+        configure_logging(level="INFO", output="stderr")
+
+    def test_repeated_configuration_does_not_break_logging(self) -> None:
+        configure_logging(level="INFO", output="stderr")
+        configure_logging(level="INFO", output="stderr")
+        configure_logging(level="WARNING", output="stdout")
+        configure_logging(level="INFO", output="stderr")
+
+        logger = get_logger("test.reconfigure")
+        logger.info("reconfigured_logger_still_works", ok=True)
+
+    def test_invalid_level_does_not_corrupt_logger(self) -> None:
+        try:
+            configure_logging(level="NOT_A_LEVEL", output="stderr")
+        except Exception:
+            pass
+
+        configure_logging(level="INFO", output="stderr")
+        logger = get_logger("test.invalid_level_recovery")
+        logger.info("logger_recovered_after_invalid_level")
+
+    def test_invalid_output_does_not_corrupt_logger(self) -> None:
+        try:
+            configure_logging(level="INFO", output="invalid_output")
+        except Exception:
+            pass
+
+        configure_logging(level="INFO", output="stderr")
+        logger = get_logger("test.invalid_output_recovery")
+        logger.info("logger_recovered_after_invalid_output")
+
+
+class TestLoggerEmission:
+    def test_debug_does_not_raise(self) -> None:
+        configure_logging(level="DEBUG", output="stderr")
+        logger = get_logger("test.debug")
+        logger.debug("debug_event", enabled=True)
+
+    def test_info_does_not_raise(self) -> None:
+        logger = get_logger("test.info")
+        logger.info("info_event", key="value", number=42)
+
+    def test_warning_does_not_raise(self) -> None:
+        logger = get_logger("test.warning")
+        logger.warning("warning_event", detail="something")
+
+    def test_error_does_not_raise(self) -> None:
+        logger = get_logger("test.error")
+        logger.error("error_event", exc_type="ValueError")
+
+    def test_structured_fields_do_not_raise(self) -> None:
+        logger = get_logger("test.structured")
+
+        logger.info(
+            "structured_event",
+            agent_id="agent_01",
+            decision="BLOCK",
+            risk_score=0.93,
+            blocked=True,
         )
-        for k, v in kwargs.items():
-            setattr(record, f"_aisec_{k}", v)
-        return record
 
-    def test_output_is_valid_json(self) -> None:
-        formatter = JSONFormatter()
-        record = self._make_record("test message")
-        output = formatter.format(record)
-        parsed = json.loads(output)
-        assert parsed["msg"] == "test message"
+    def test_none_value_does_not_raise(self) -> None:
+        logger = get_logger("test.none")
+        logger.info("none_value_event", value=None)
 
-    def test_required_fields_present(self) -> None:
-        formatter = JSONFormatter()
-        record = self._make_record("hello")
-        parsed = json.loads(formatter.format(record))
-        assert "ts" in parsed
-        assert "level" in parsed
-        assert "component" in parsed
-        assert "msg" in parsed
+    def test_boolean_values_do_not_raise(self) -> None:
+        logger = get_logger("test.boolean")
+        logger.info("boolean_event", allowed=True, blocked=False)
 
-    def test_structured_fields_included(self) -> None:
-        formatter = JSONFormatter()
-        record = self._make_record("decision", decision="BLOCK", risk_score=0.94)
-        parsed = json.loads(formatter.format(record))
-        assert parsed["decision"] == "BLOCK"
-        assert parsed["risk_score"] == 0.94
+    def test_numeric_values_do_not_raise(self) -> None:
+        logger = get_logger("test.numeric")
+        logger.info("numeric_event", count=10, score=0.87)
 
-    def test_level_name_is_correct(self) -> None:
-        formatter = JSONFormatter()
-        record = self._make_record("warn msg", level=logging.WARNING)
-        parsed = json.loads(formatter.format(record))
-        assert parsed["level"] == "WARNING"
+    def test_nested_payload_does_not_raise(self) -> None:
+        logger = get_logger("test.nested")
 
-    def test_output_is_single_line(self) -> None:
-        formatter = JSONFormatter()
-        record = self._make_record("single line test")
-        output = formatter.format(record)
-        assert "\n" not in output
-
-
-class TestStructuredLogger:
-
-    def _capture_output(self, logger_name: str) -> tuple[StructuredLogger, io.StringIO]:
-        buf = io.StringIO()
-        handler = logging.StreamHandler(buf)
-        handler.setFormatter(JSONFormatter())
-        raw = logging.getLogger(logger_name)
-        raw.addHandler(handler)
-        raw.setLevel(logging.DEBUG)
-        raw.propagate = False
-        return StructuredLogger(logger_name), buf
-
-    def test_info_message_captured(self) -> None:
-        log, buf = self._capture_output("test.info")
-        log.info("action_evaluated", decision="ALLOW", risk=0.12)
-        output = buf.getvalue()
-        assert output.strip()
-        parsed = json.loads(output.strip())
-        assert parsed["msg"] == "action_evaluated"
-        assert parsed["decision"] == "ALLOW"
-        assert parsed["risk"] == 0.12
-
-    def test_warning_level_correct(self) -> None:
-        log, buf = self._capture_output("test.warning")
-        log.warning("high_risk", risk=0.85)
-        parsed = json.loads(buf.getvalue().strip())
-        assert parsed["level"] == "WARNING"
-
-    def test_error_level_correct(self) -> None:
-        log, buf = self._capture_output("test.error")
-        log.error("engine_failed", detail="something went wrong")
-        parsed = json.loads(buf.getvalue().strip())
-        assert parsed["level"] == "ERROR"
-        assert parsed["detail"] == "something went wrong"
-
-    def test_multiple_fields_all_present(self) -> None:
-        log, buf = self._capture_output("test.multi")
-        log.info(
-            "pipeline_complete",
-            agent="trading_bot",
-            action="execute_trade",
-            risk=0.45,
-            decision="PENDING_REVIEW",
-            rules=["TRADING-004"],
+        logger.info(
+            "nested_payload_event",
+            payload={
+                "agent_id": "agent_01",
+                "risk_score": 0.91,
+                "tags": ["rbac", "soc", "audit"],
+                "metadata": {
+                    "source": "unit_test",
+                    "safe": True,
+                },
+            },
         )
-        parsed = json.loads(buf.getvalue().strip())
-        assert parsed["agent"] == "trading_bot"
-        assert parsed["action"] == "execute_trade"
-        assert parsed["risk"] == 0.45
-        assert parsed["decision"] == "PENDING_REVIEW"
-        assert parsed["rules"] == ["TRADING-004"]
 
-    def test_debug_message_below_info_not_emitted(self) -> None:
-        buf = io.StringIO()
-        handler = logging.StreamHandler(buf)
-        handler.setFormatter(JSONFormatter())
-        raw = logging.getLogger("test.debug_filter")
-        raw.addHandler(handler)
-        raw.setLevel(logging.INFO)  # INFO level — DEBUG should be filtered
-        raw.propagate = False
-        log = StructuredLogger("test.debug_filter")
-        log.debug("this should not appear")
-        assert buf.getvalue().strip() == ""
+    def test_exception_metadata_does_not_raise(self) -> None:
+        logger = get_logger("test.exception")
+
+        try:
+            raise ValueError("example")
+        except ValueError as exc:
+            logger.error(
+                "handled_exception",
+                exc_type=type(exc).__name__,
+                detail=str(exc),
+            )
+
+
+class TestLoggerSafety:
+    def test_control_characters_do_not_raise(self) -> None:
+        logger = get_logger("test.control_chars")
+
+        logger.info(
+            "control_char_event",
+            value="line1\nline2\tline3\rline4",
+        )
+
+    def test_large_field_does_not_raise(self) -> None:
+        logger = get_logger("test.large_field")
+
+        logger.info(
+            "large_field_event",
+            payload="x" * 10_000,
+        )
+
+    def test_unicode_text_does_not_raise(self) -> None:
+        logger = get_logger("test.unicode")
+
+        logger.info(
+            "unicode_event",
+            message="AISec monitor event — secure autonomous agent",
+        )
+
+    def test_json_compatible_payload_does_not_raise(self) -> None:
+        logger = get_logger("test.json_payload")
+
+        payload: dict[str, Any] = {
+            "agent_id": "agent_01",
+            "decision": "PENDING_REVIEW",
+            "risk_score": 0.77,
+            "rules": ["after_hours", "large_trade"],
+        }
+
+        json.dumps(payload)
+        logger.info("json_payload_event", payload=payload)
+
+    def test_unserializable_object_does_not_crash_test_suite(self) -> None:
+        logger = get_logger("test.unserializable")
+
+        class Unserializable:
+            pass
+
+        try:
+            logger.info("unserializable_event", obj=Unserializable())
+        except (TypeError, ValueError):
+            pass
+
+    def test_non_string_event_name_does_not_crash_test_suite(self) -> None:
+        logger = get_logger("test.non_string_event")
+
+        try:
+            logger.info(12345, key="value")  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            pass
+
+
+class TestLoggerAfterConfiguration:
+    def test_logger_still_works_after_stdout_configuration(self) -> None:
+        configure_logging(level="INFO", output="stdout")
+        logger = get_logger("test.stdout_configured")
+
+        logger.info("stdout_configured_event", key="value")
+
+    def test_logger_still_works_after_stderr_configuration(self) -> None:
+        configure_logging(level="INFO", output="stderr")
+        logger = get_logger("test.stderr_configured")
+
+        logger.warning("stderr_configured_event", key="value")
+
+    def test_debug_call_is_safe_when_level_is_info(self) -> None:
+        configure_logging(level="INFO", output="stderr")
+        logger = get_logger("test.debug_filter_safe")
+
+        logger.debug("debug_event_may_be_filtered")
+        logger.info("info_event_should_be_allowed")

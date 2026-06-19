@@ -1,816 +1,959 @@
 """
-AISec SOC console — interactive analyst environment.
+AISec SOC Console — Interactive Security Operations Centre.
 
-Provides a Metasploit-style interactive console where security
-analysts can review flagged AI actions, approve or block them,
-escalate incidents, and inspect the audit trail.
+A terminal-based analyst console for reviewing and resolving AI agent actions
+that require human approval.
 
-Security considerations:
-    - Every analyst decision is written to the audit log.
-    - Critical actions require explicit typed confirmation.
-    - The console cannot modify past audit entries.
-    - Session identity is set at startup and cannot be changed.
-    - All input is sanitised before processing.
+Enterprise-oriented design:
+    - Interactive SOC queue review.
+    - Analyst approve / block / escalate decisions.
+    - Admin-only safe-state release.
+    - RBAC enforcement for every sensitive operation.
+    - Audit logging for sessions and decisions.
+    - Queue filtering and event inspection.
+    - Safe input sanitization for audit/log output.
+    - JSON output support for automation and demos.
+    - Local audit-log backend for demos and research evaluation.
 
 Usage:
-    aisec soc
-    aisec soc --scenario trading_ai --steps 20
+    aisec soc --role analyst
+    aisec soc --role admin
+    aisec soc --scenario trading_ai --role analyst
+    aisec soc --json
+
+Security:
+    - All analyst decisions are written to the tamper-evident audit trail.
+    - Admin actions require explicit confirmation.
+    - Role is fixed at session startup.
+    - Local demo role selection is not authentication.
+    - Production authentication must happen before this CLI is trusted.
 """
 
 from __future__ import annotations
 
+import json
+import re
+import sys
 import time
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
+from typing import Any, Iterable, Sequence
 
 import click
-from prompt_toolkit import PromptSession
-from prompt_toolkit.formatted_text import HTML
-from prompt_toolkit.styles import Style
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
-# --- CHANGE 1: Added imports ---
-from aisec.security.rbac import (
-    AccessDeniedError,
-    Permission,
-    Principal,
-    RBACEnforcer,
-    Role,
-    create_principal,
-)
+from aisec.storage.audit import DEFAULT_LOG_PATH
+from aisec.utils.logger import get_logger
 
-from aisec.agents.trading_agent import (
-    DANGEROUS_ACTIONS as TRADING_DANGEROUS,
-    SAFE_ACTIONS as TRADING_SAFE,
-    TradingAgent,
-)
-from aisec.agents.urban_agent import (
-    DANGEROUS_ACTIONS as URBAN_DANGEROUS,
-    SAFE_ACTIONS as URBAN_SAFE,
-    UrbanAgent,
-)
-from aisec.core.engine import AnalysisEngine, EngineResult
-from aisec.storage.audit import AuditLogger
-from aisec.storage.models import Decision
-
-console = Console()
-
-# Rate limiting imports and state
-import time as _time
-
-# Minimum seconds between irreversible analyst decisions.
-# Prevents automated approval of events faster than human review.
-_MIN_DECISION_INTERVAL: float = 1.0
-_last_decision_time: float = 0.0
-
-# ─ SOC queue ─────────────────────────────────────────────────────────────────
-# (Unchanged from your original code)
+log = get_logger("aisec.cli.soc")
 
 
-class SOCQueue:
-    """
-    In-memory queue of events requiring analyst review.
+# ── Constants ─────────────────────────────────────────────────────────────────
 
-    Tracks pending, approved, blocked, and escalated events.
-    All analyst decisions are written to the audit log.
-    """
+MAX_TEXT_LEN = 500
+MAX_REASON_LEN = 300
+MAX_EVENT_DISPLAY = 50
+MAX_AGENT_ID_LEN = 128
+MAX_PRINCIPAL_ID_LEN = 128
 
-    def __init__(self, audit_logger: AuditLogger) -> None:
-        self._pending: list[EngineResult] = []
-        self._resolved: list[tuple[EngineResult, str, str]] = []
-        self._logger = audit_logger
+_SAFE_TEXT_RE = re.compile(r"[^A-Za-z0-9_.:@/\- ,;()[\]{}+=#%!?]")
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9_.:@-]+$")
 
-    def submit(self, result: EngineResult) -> None:
-        """Add a flagged event to the review queue."""
-        self._pending.append(result)
 
-    def pending(self) -> list[EngineResult]:
-        """Return all unresolved events."""
-        return list(self._pending)
+# ── Enums / Models ────────────────────────────────────────────────────────────
 
-    def pending_count(self) -> int:
-        return len(self._pending)
 
-    def resolve(
-        self,
-        result: EngineResult,
-        analyst_decision: str,
-        analyst_id: str,
-        reason: str = "",
-    ) -> None:
-        """
-        Record an analyst decision and move event out of pending queue.
+class SOCDecision(str, Enum):
+    """Allowed analyst decisions."""
 
-        Args:
-            result:           The EngineResult being resolved.
-            analyst_decision: "approve", "block", or "escalate".
-            analyst_id:       Identity of the analyst making the decision.
-            reason:           Optional reason for the decision.
-        """
-        # Validate decision value before logging
-        valid = {"approve", "block", "escalate"}
-        if analyst_decision not in valid:
-            raise ValueError(
-                f"Invalid analyst decision '{analyst_decision}'. "
-                f"Must be one of: {valid}"
-            )
+    APPROVE = "approve"
+    BLOCK = "block"
+    ESCALATE = "escalate"
+    FALSE_POSITIVE = "false_positive"
+    DISMISS = "dismiss"
 
-        # Remove from pending
-        self._pending = [
-            r for r in self._pending if r.event.event_id != result.event.event_id
-        ]
 
-        # Record resolution
-        self._resolved.append((result, analyst_decision, analyst_id))
+class QueueStatus(str, Enum):
+    """Queue status filters."""
 
-        # Write to tamper-evident audit log
-        self._logger.log(
-            record_type="analyst_decision",
-            record_id=result.event.event_id,
-            payload={
-                "analyst_id": analyst_id,
-                "analyst_decision": analyst_decision,
-                "reason": reason,
-                "action_type": result.event.action_type,
-                "agent_id": result.event.agent_id,
-                "original_decision": result.analysis.decision.value,
-                "risk_score": result.analysis.risk_score,
-            },
+    PENDING = "pending"
+    ESCALATED = "escalated"
+    ALL = "all"
+
+
+@dataclass(frozen=True)
+class SOCQueueItem:
+    """Normalized SOC queue item."""
+
+    record_id: str
+    decision: str
+    action_type: str
+    agent_id: str
+    risk_score: float
+    explanation: str
+    payload: dict[str, Any]
+    created_at: Any = None
+
+
+@dataclass(frozen=True)
+class SOCSession:
+    """SOC console session context."""
+
+    principal_id: str
+    role: str
+    scenario: str
+    started_at: float
+
+
+# ── Sanitization helpers ──────────────────────────────────────────────────────
+
+
+def _sanitize_text(value: Any, *, max_len: int = MAX_TEXT_LEN) -> str:
+    """Return audit-safe human-readable text."""
+    if value is None:
+        return ""
+
+    text = str(value)
+    text = text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+    text = _SAFE_TEXT_RE.sub("", text)
+    text = " ".join(text.split())
+    return text[:max_len]
+
+
+def _sanitize_identifier(value: Any, *, fallback: str = "unknown") -> str:
+    """Return safe ID-like text for principal/event/agent IDs."""
+    if value is None:
+        return fallback
+
+    text = str(value).strip()
+    text = text.replace("\r", "").replace("\n", "").replace("\t", "")
+
+    if not text:
+        return fallback
+
+    if len(text) > MAX_PRINCIPAL_ID_LEN:
+        text = text[:MAX_PRINCIPAL_ID_LEN]
+
+    if not _SAFE_ID_RE.fullmatch(text):
+        return fallback
+
+    return text
+
+
+def _safe_float(value: Any, *, default: float = 0.0) -> float:
+    """Convert value to float safely."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _format_percentage(count: int, total: int) -> str:
+    if total <= 0:
+        return "0.0%"
+    return f"{count / total * 100:.1f}%"
+
+
+def _short(text: Any, length: int = 80) -> str:
+    value = _sanitize_text(text, max_len=MAX_TEXT_LEN)
+    if len(value) <= length:
+        return value
+    return value[: max(0, length - 1)] + "…"
+
+
+def _print_json(data: Any) -> None:
+    click.echo(json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False))
+
+
+# ── Role / principal helpers ──────────────────────────────────────────────────
+
+
+def _get_role(role_str: str):
+    """Parse user role into AISec Role."""
+    from aisec.security.rbac import Role
+
+    role_map = {
+        "analyst": Role.ANALYST,
+        "admin": Role.ADMIN,
+    }
+
+    role = role_map.get(role_str.lower())
+    if role is None:
+        raise click.BadParameter(f"Invalid role '{role_str}'. Choose: analyst, admin")
+
+    return role
+
+
+def _build_principal(principal_id: str, role: str):
+    """Build an immutable RBAC principal."""
+    from aisec.security.rbac import Principal
+
+    role_obj = _get_role(role)
+    safe_principal_id = _sanitize_identifier(
+        principal_id,
+        fallback="soc_user",
+    )
+
+    if len(safe_principal_id) < 3:
+        safe_principal_id = "soc_user"
+
+    return Principal(
+        principal_id=safe_principal_id,
+        role=role_obj,
+        display_name=safe_principal_id,
+    )
+
+
+def _display_header(role_str: str, scenario: str) -> None:
+    """Print SOC console header."""
+    click.echo("\n" + "=" * 64)
+    click.echo("  AISec SOC Console")
+    click.echo(f"  Role: {role_str.upper()}  |  Scenario: {scenario}")
+    click.echo("=" * 64)
+
+
+# ── Audit / queue helpers ─────────────────────────────────────────────────────
+
+
+def _get_entries(engine: Any) -> list[Any]:
+    """Read all audit entries safely."""
+    try:
+        entries = engine._logger.get_all()
+        return list(entries)
+    except Exception as exc:
+        click.echo(
+            click.style(f"  Failed to read audit log: {exc}", fg="red"),
+            err=True,
         )
+        return []
 
-    def resolved_count(self) -> int:
-        return len(self._resolved)
 
-    def verify_chain(self) -> tuple[bool, list[str]]:
-        """Verify the audit log hash chain integrity."""
-        return self._logger.verify_chain()
+def _analysis_entries(engine: Any) -> list[Any]:
+    """Return analysis audit entries only."""
+    return [
+        entry
+        for entry in _get_entries(engine)
+        if getattr(entry, "record_type", None) == "analysis"
+    ]
 
-    def get_last_entries(self, n: int = 10) -> list:
-        """Return the last n audit log entries."""
-        return self._logger.get_last(max(1, min(n, 100)))
 
-    def stats(self) -> dict[str, int]:
-        """Return counts of each analyst decision type."""
-        counts: dict[str, int] = {"approve": 0, "block": 0, "escalate": 0}
-        for _, decision, _ in self._resolved:
-            counts[decision] = counts.get(decision, 0) + 1
-        return counts
+def _decision_entries(engine: Any) -> list[Any]:
+    """Return analyst decision entries only."""
+    return [
+        entry
+        for entry in _get_entries(engine)
+        if getattr(entry, "record_type", None) == "analyst_decision"
+    ]
+
+
+def _resolved_event_ids(engine: Any) -> set[str]:
+    """Return event IDs that already have analyst decisions."""
+    resolved: set[str] = set()
+
+    for entry in _decision_entries(engine):
+        record_id = getattr(entry, "record_id", "")
+        payload = getattr(entry, "payload", {}) or {}
+
+        if record_id:
+            resolved.add(str(record_id))
+
+        event_id = payload.get("event_id")
+        if event_id:
+            resolved.add(str(event_id))
+
+    return resolved
+
+
+def _normalize_queue_item(entry: Any) -> SOCQueueItem:
+    """Convert an audit entry into a normalized queue item."""
+    payload = getattr(entry, "payload", {}) or {}
+
+    record_id = _sanitize_identifier(
+        getattr(entry, "record_id", "unknown"),
+        fallback="unknown",
+    )
+    decision = _sanitize_text(payload.get("decision", "UNKNOWN"))
+    action_type = _sanitize_text(payload.get("action_type", "unknown"))
+    agent_id = _sanitize_identifier(
+        payload.get("agent_id", "?"),
+        fallback="unknown_agent",
+    )
+    risk_score = _safe_float(payload.get("risk_score", 0.0))
+    explanation = _sanitize_text(payload.get("explanation", ""))
+
+    return SOCQueueItem(
+        record_id=record_id,
+        decision=decision,
+        action_type=action_type,
+        agent_id=agent_id,
+        risk_score=risk_score,
+        explanation=explanation,
+        payload=dict(payload),
+        created_at=getattr(entry, "created_at", None),
+    )
+
+
+def _queue_items(
+    engine: Any,
+    *,
+    status: QueueStatus = QueueStatus.PENDING,
+    limit: int = MAX_EVENT_DISPLAY,
+    agent_id: str | None = None,
+) -> list[SOCQueueItem]:
+    """Return unresolved queue items matching filter."""
+    resolved_ids = _resolved_event_ids(engine)
+    items: list[SOCQueueItem] = []
+
+    for entry in _analysis_entries(engine):
+        item = _normalize_queue_item(entry)
+
+        if item.record_id in resolved_ids:
+            continue
+
+        decision_upper = item.decision.upper()
+
+        if status == QueueStatus.PENDING:
+            if decision_upper != "PENDING_REVIEW":
+                continue
+        elif status == QueueStatus.ESCALATED:
+            if decision_upper != "ESCALATE":
+                continue
+        elif status == QueueStatus.ALL:
+            if decision_upper not in {"PENDING_REVIEW", "ESCALATE"}:
+                continue
+
+        if agent_id and item.agent_id != agent_id:
+            continue
+
+        items.append(item)
+
+    return items[: max(1, min(limit, MAX_EVENT_DISPLAY))]
+
+
+def _find_queue_item(engine: Any, event_id: str) -> SOCQueueItem | None:
+    """Find a queue event by ID."""
+    safe_event_id = _sanitize_identifier(event_id, fallback="")
+    if not safe_event_id:
+        return None
+
+    for item in _queue_items(engine, status=QueueStatus.ALL, limit=MAX_EVENT_DISPLAY):
+        if item.record_id == safe_event_id:
+            return item
+
+    for entry in _analysis_entries(engine):
+        item = _normalize_queue_item(entry)
+        if item.record_id == safe_event_id:
+            return item
+
+    return None
+
+
+def _is_event_resolved(engine: Any, event_id: str) -> bool:
+    """Return True if an event already has analyst resolution."""
+    safe_event_id = _sanitize_identifier(event_id, fallback="")
+    return safe_event_id in _resolved_event_ids(engine)
 
 
 # ── Display helpers ───────────────────────────────────────────────────────────
-# (Unchanged from your original code)
-
-_DECISION_STYLE: dict[Decision, str] = {
-    Decision.ALLOW: "bold green",
-    Decision.BLOCK: "bold red",
-    Decision.ESCALATE: "bold magenta",
-    Decision.PENDING_REVIEW: "bold yellow",
-}
 
 
-def _print_queue_table(queue: SOCQueue) -> None:
-    """Render the pending review queue as a Rich table."""
-    pending = queue.pending()
+def _display_queue(
+    engine: Any,
+    enforcer: Any,
+    principal: Any,
+    *,
+    status: QueueStatus = QueueStatus.ALL,
+    limit: int = 10,
+    agent_id: str | None = None,
+    json_mode: bool = False,
+) -> list[Any] | None:
+    """Display unresolved SOC queue events."""
+    from aisec.security.rbac import Permission
 
-    if not pending:
-        console.print(
-            Panel(
-                "[bold green]No events pending review.[/bold green]",
-                title="[bold]SOC Review Queue[/bold]",
-                border_style="green",
+    if not enforcer.check(principal, Permission.VIEW_QUEUE):
+        click.echo(click.style("  Access denied: cannot view queue.", fg="red"))
+        return None
+
+    items = _queue_items(
+        engine,
+        status=status,
+        limit=limit,
+        agent_id=agent_id,
+    )
+
+    if json_mode:
+        _print_json([item.__dict__ for item in items])
+        return items if items else None
+
+    click.echo(f"\n  Pending review: {len(items)} event(s)\n")
+
+    if not items:
+        click.echo("  Queue is empty — no events require review.")
+        return None
+
+    for index, item in enumerate(items, 1):
+        decision_upper = item.decision.upper()
+        decision_color = "yellow"
+        if decision_upper == "ESCALATE":
+            decision_color = "red"
+
+        click.echo(
+            f"  [{index}] {item.action_type:<30} "
+            f"agent={item.agent_id:<20} "
+            f"risk={item.risk_score:.3f}  "
+            + click.style(item.decision, fg=decision_color)
+        )
+        click.echo(f"      {_short(item.explanation, 90)}")
+        click.echo(f"      ID: {item.record_id}")
+        click.echo()
+
+    return items
+
+
+def _display_event_detail(
+    engine: Any,
+    enforcer: Any,
+    principal: Any,
+    event_id: str,
+    *,
+    json_mode: bool = False,
+) -> None:
+    """Display one event in detail."""
+    from aisec.security.rbac import Permission
+
+    if not enforcer.check(principal, Permission.VIEW_QUEUE):
+        click.echo(click.style("  Access denied: cannot inspect events.", fg="red"))
+        return
+
+    item = _find_queue_item(engine, event_id)
+    if item is None:
+        click.echo(click.style("  Event not found.", fg="red"))
+        return
+
+    if json_mode:
+        _print_json(item.__dict__)
+        return
+
+    click.echo("\n  Event Detail")
+    click.echo("  " + "-" * 56)
+    click.echo(f"  ID:          {item.record_id}")
+    click.echo(f"  Agent:       {item.agent_id}")
+    click.echo(f"  Action:      {item.action_type}")
+    click.echo(f"  Decision:    {item.decision}")
+    click.echo(f"  Risk score:  {item.risk_score:.3f}")
+    click.echo(f"  Explanation: {item.explanation}")
+    click.echo("\n  Payload:")
+    _print_json(item.payload)
+
+
+def _display_safe_state(
+    engine: Any,
+    enforcer: Any,
+    principal: Any,
+    *,
+    json_mode: bool = False,
+) -> None:
+    """Display active safe-state restrictions."""
+    from aisec.security.rbac import Permission
+
+    if not enforcer.check(principal, Permission.VIEW_SAFE_STATE):
+        click.echo(click.style("  Access denied: cannot view safe state.", fg="red"))
+        return
+
+    active = engine.safe_state.list_active()
+
+    if json_mode:
+        _print_json([entry.__dict__ for entry in active])
+        return
+
+    click.echo(f"\n  Agents in safe state: {len(active)}")
+
+    if not active:
+        click.echo("  No agents currently restricted.")
+        return
+
+    for entry in active:
+        agent_id = _sanitize_identifier(
+            getattr(entry, "agent_id", "unknown"),
+            fallback="unknown_agent",
+        )
+        triggered_by = _sanitize_text(getattr(entry, "triggered_by", "unknown"))
+        reason = _sanitize_text(getattr(entry, "reason", ""))
+        entered_at = getattr(entry, "entered_at", "")
+
+        click.echo(
+            f"  • {agent_id:<30} "
+            + click.style("RESTRICTED", fg="red")
+            + f"  triggered_by={triggered_by}"
+        )
+        click.echo(f"    Reason: {reason[:100]}")
+        click.echo(f"    Since:  {entered_at}")
+        click.echo()
+
+
+def _display_metrics(
+    engine: Any,
+    enforcer: Any,
+    principal: Any,
+    *,
+    json_mode: bool = False,
+) -> None:
+    """Display SOC metrics."""
+    from aisec.security.rbac import Permission
+
+    if not enforcer.check(principal, Permission.VIEW_METRICS):
+        click.echo(click.style("  Access denied: cannot view metrics.", fg="red"))
+        return
+
+    analysis_entries = _analysis_entries(engine)
+    total = len(analysis_entries)
+
+    if total == 0:
+        if json_mode:
+            _print_json(
+                {
+                    "events_analysed": 0,
+                    "blocked": 0,
+                    "pending_review": 0,
+                    "allowed": 0,
+                    "audit_chain_intact": True,
+                    "safe_state_count": engine.safe_state.active_count(),
+                }
+            )
+            return
+
+        click.echo("\n  No events analysed yet.")
+        return
+
+    decisions = [
+        str((getattr(entry, "payload", {}) or {}).get("decision", "")).upper()
+        for entry in analysis_entries
+    ]
+
+    blocked = sum(1 for decision in decisions if decision in {"BLOCK", "ESCALATE"})
+    reviewed = sum(1 for decision in decisions if decision == "PENDING_REVIEW")
+    allowed = total - blocked - reviewed
+
+    ok, errors = engine.verify_audit_chain()
+    safe_state_count = engine.safe_state.active_count()
+
+    if json_mode:
+        _print_json(
+            {
+                "events_analysed": total,
+                "blocked": blocked,
+                "pending_review": reviewed,
+                "allowed": allowed,
+                "audit_chain_intact": ok,
+                "audit_errors": errors,
+                "safe_state_count": safe_state_count,
+            }
+        )
+        return
+
+    chain_label = (
+        click.style("INTACT", fg="green") if ok else click.style("BROKEN", fg="red")
+    )
+
+    click.echo(f"\n  Events analysed:  {total}")
+    click.echo(f"  Blocked:          {blocked} ({_format_percentage(blocked, total)})")
+    click.echo(
+        f"  Pending review:   {reviewed} ({_format_percentage(reviewed, total)})"
+    )
+    click.echo(f"  Allowed:          {allowed} ({_format_percentage(allowed, total)})")
+    click.echo(f"  Audit chain:      {chain_label}")
+    click.echo(f"  Safe state count: {safe_state_count}")
+
+
+# ── Mutating SOC actions ──────────────────────────────────────────────────────
+
+
+def _resolve_event(
+    event_id: str,
+    decision: str,
+    engine: Any,
+    enforcer: Any,
+    principal: Any,
+    *,
+    reason: str | None = None,
+) -> None:
+    """Resolve an event from the SOC queue."""
+    from aisec.security.rbac import Permission
+
+    if not enforcer.check(principal, Permission.RESOLVE_QUEUE):
+        click.echo(click.style("  Access denied: cannot resolve events.", fg="red"))
+        return
+
+    safe_event_id = _sanitize_identifier(event_id, fallback="")
+    if not safe_event_id:
+        click.echo(click.style("  Invalid event ID.", fg="red"))
+        return
+
+    normalized_decision = _sanitize_text(decision, max_len=40).lower()
+    allowed_decisions = {item.value for item in SOCDecision}
+    if normalized_decision not in allowed_decisions:
+        click.echo(
+            click.style(
+                f"  Invalid decision. Choose: {', '.join(sorted(allowed_decisions))}",
+                fg="red",
             )
         )
         return
 
-    table = Table(
-        title=f"[bold yellow]SOC Review Queue — {len(pending)} pending[/bold yellow]",
-        show_header=True,
-        header_style="bold white on dark_red",
-        border_style="yellow",
-        expand=True,
-        show_lines=True,
+    if _is_event_resolved(engine, safe_event_id):
+        click.echo(click.style("  Event is already resolved.", fg="yellow"))
+        return
+
+    clean_reason = _sanitize_text(
+        reason or f"SOC console decision by {principal.principal_id}",
+        max_len=MAX_REASON_LEN,
     )
 
-    table.add_column("#", width=4, no_wrap=True)
-    table.add_column("Agent", width=16, no_wrap=True, style="cyan")
-    table.add_column("Action", width=28, no_wrap=True)
-    table.add_column("Target", width=22, no_wrap=True, style="dim white")
-    table.add_column("Decision", width=12, no_wrap=True)
-    table.add_column("Risk", width=8, no_wrap=True)
-    table.add_column("Reason", min_width=30)
-
-    for i, result in enumerate(pending, start=1):
-        decision = result.analysis.decision
-        style = _DECISION_STYLE.get(decision, "white")
-        reason = result.analysis.explanation[:55]
-        if len(result.analysis.explanation) > 55:
-            reason += "…"
-
-        table.add_row(
-            str(i),
-            result.event.agent_id[:16],
-            result.event.action_type[:28],
-            result.event.target[:22],
-            Text(decision.value, style=style),
-            f"{result.analysis.risk_score:.2f}",
-            reason,
-        )
-
-    console.print(table)
-
-
-def _print_event_detail(result: EngineResult, index: int) -> None:
-    """Print full details of a single event for analyst review."""
-    decision = result.analysis.decision
-    style = _DECISION_STYLE.get(decision, "white")
-
-    console.print()
-    console.print(
-        Panel(
-            f"[bold]Event ID:[/]        {result.event.event_id}\n"
-            f"[bold]Timestamp:[/]       {result.event.timestamp}\n"
-            f"[bold]Agent:[/]           {result.event.agent_id}\n"
-            f"[bold]Scenario:[/]        {result.event.scenario.value}\n"
-            f"[bold]Action:[/]          {result.event.action_type}\n"
-            f"[bold]Target:[/]          {result.event.target}\n"
-            f"[bold]Payload:[/]         {result.event.raw_payload}\n"
-            f"[bold]Risk score:[/]      {result.analysis.risk_score:.4f}\n"
-            f"[bold]Decision:[/]        [{style}]{decision.value}[/{style}]\n"
-            f"[bold]Rules fired:[/]     {result.analysis.rule_hits or 'none'}\n"
-            f"[bold]Explanation:[/]     {result.analysis.explanation}",
-            title=f"[bold yellow]Event #{index} — Analyst Review[/bold yellow]",
-            border_style="yellow",
-        )
+    engine._logger.log(
+        record_type="analyst_decision",
+        record_id=safe_event_id,
+        payload={
+            "analyst_id": principal.principal_id,
+            "analyst_role": principal.role.value,
+            "analyst_decision": normalized_decision,
+            "reason": clean_reason,
+            "event_id": safe_event_id,
+            "source": "soc_console",
+        },
     )
-    console.print()
 
+    color = "green" if normalized_decision in {"approve", "false_positive"} else "red"
+    if normalized_decision == "escalate":
+        color = "yellow"
 
-def _print_soc_header(queue: SOCQueue, analyst_id: str) -> None:
-    """Print the SOC console header panel."""
-    stats = queue.stats()
-    console.print(
-        Panel(
-            f"[bold white]Analyst:[/]       {analyst_id}\n"
-            f"[bold yellow]Pending:[/]       {queue.pending_count()}\n"
-            f"[bold white]Resolved:[/]       {queue.resolved_count()}   "
-            f"([green]approved: {stats['approve']}[/green]  "
-            f"[red]blocked: {stats['block']}[/red]  "
-            f"[magenta]escalated: {stats['escalate']}[/magenta])",
-            title="[bold cyan]AISec SOC Console — Analyst Mode[/bold cyan]",
-            border_style="cyan",
+    click.echo(
+        click.style(
+            f"  Decision recorded: {normalized_decision.upper()}",
+            fg=color,
         )
+        + f"  (event={safe_event_id[:24]})"
     )
 
 
-def _print_help() -> None:
-    """Print available SOC console commands."""
-    console.print(
-        Panel(
-            "[bold cyan]queue[/]              Show all pending events\n"
-            "[bold cyan]review <N>[/]         Review event number N in detail\n"
-            "[bold cyan]approve <N>[/]        Approve event N — allow action to proceed\n"
-            "[bold cyan]block <N>[/]          Block event N — action is denied\n"
-            "[bold cyan]escalate <N>[/]       Escalate event N to senior analyst\n"
-            "[bold cyan]stats[/]              Show session statistics\n"
-            "[bold cyan]verify[/]             Verify audit log hash chain integrity\n"
-            "[bold cyan]logs [N][/]           Show last N audit log entries (default 10)\n"
-            "[bold cyan]help[/]               Show this help message\n"
-            "[bold cyan]exit[/]               Exit the SOC console",
-            title="[bold]Available Commands[/bold]",
-            border_style="dim",
-        )
+def _release_safe_state(
+    agent_id: str,
+    engine: Any,
+    enforcer: Any,
+    principal: Any,
+    *,
+    reason: str = "Released via SOC console",
+    force_confirm: bool = False,
+) -> None:
+    """Release an agent from safe state. Admin-only."""
+    from aisec.security.rbac import AccessDeniedError, Permission
+
+    safe_agent_id = _sanitize_identifier(
+        agent_id,
+        fallback="",
     )
 
-
-# ── Command parser ────────────────────────────────────────────────────────────
-# (Unchanged from your original code)
-
-
-def _parse_index(parts: list[str], queue: SOCQueue) -> int | None:
-    """
-    Parse and validate an event index from command parts.
-
-    Returns the 0-based index into the pending queue,
-    or None if the input is invalid.
-    """
-    if len(parts) < 2:
-        console.print(Text("  Usage: <command> <event number>", style="red"))
-        return None
+    if not safe_agent_id:
+        click.echo(click.style("  Invalid agent ID.", fg="red"))
+        return
 
     try:
-        n = int(parts[1])
-    except ValueError:
-        console.print(Text(f"  '{parts[1]}' is not a number.", style="red"))
-        return None
-
-    pending = queue.pending()
-    if n < 1 or n > len(pending):
-        console.print(
-            Text(
-                f"  Event #{n} does not exist. "
-                f"Queue has {len(pending)} pending events.",
-                style="red",
+        enforcer.require(
+            principal,
+            Permission.MANAGE_SAFE_STATE,
+            f"release agent {safe_agent_id} from safe state",
+        )
+    except AccessDeniedError:
+        click.echo(
+            click.style(
+                "  Access denied: only admins can release agents from safe state.",
+                fg="red",
             )
         )
-        return None
+        return
 
-    return n - 1  # Convert to 0-based index
+    clean_reason = _sanitize_text(reason, max_len=MAX_REASON_LEN)
 
-
-def _confirm_action(action_name: str, event_num: int) -> bool:
-    """
-    Require explicit typed confirmation for irreversible analyst decisions.
-
-    The analyst must type 'CONFIRM <ACTION>' to proceed.
-    Any other input cancels the action.
-    """
-    expected = f"CONFIRM {action_name.upper()}"
-    console.print(
-        Text(
-            f"  Type '{expected}' to confirm, or anything else to cancel:",
-            style="yellow",
+    if not force_confirm:
+        confirmed = click.confirm(
+            f"  Release '{safe_agent_id}' from safe state? "
+            "This action is audit logged."
         )
+        if not confirmed:
+            click.echo("  Cancelled.")
+            return
+
+    released = engine.safe_state.exit_safe_state(
+        agent_id=safe_agent_id,
+        admin_id=principal.principal_id,
+        reason=clean_reason,
     )
-    try:
-        response = input("  > ").strip()
-    except (EOFError, KeyboardInterrupt):
-        return False
 
-    if response == expected:
-        return True
-
-    console.print(Text("  Action cancelled.", style="dim"))
-    return False
-
-
-def _check_rate_limit() -> bool:
-    """
-    Enforce minimum time between analyst decisions.
-
-    Returns True if the decision is allowed, False if too fast.
-    This prevents automated scripts from approving events
-    faster than a human could reasonably review them.
-    """
-    global _last_decision_time
-    now = _time.monotonic()
-    elapsed = now - _last_decision_time
-    if elapsed < _MIN_DECISION_INTERVAL:
-        remaining = _MIN_DECISION_INTERVAL - elapsed
-        console.print(
-            Text(
-                f"  ⚠ Decision rate limit — wait {remaining:.1f}s.",
-                style="yellow",
+    if released:
+        click.echo(
+            click.style(
+                f"  Agent '{safe_agent_id}' released from safe state.",
+                fg="green",
             )
         )
-        return False
-    _last_decision_time = now
-    return True
+    else:
+        click.echo(f"  Agent '{safe_agent_id}' was not in safe state.")
 
 
-# --- CHANGE 4: Added helper functions ---
+# ── Session logging ───────────────────────────────────────────────────────────
 
 
-def _print_access_denied(error: AccessDeniedError) -> None:
-    """Display a clear access denied message to the analyst."""
-    console.print()
-    console.print(
-        Panel(
-            f"[bold red]ACCESS DENIED[/bold red]\n\n"
-            f"[white]Principal:[/white]  {error.principal_id}\n"
-            f"[white]Role:[/white]       {error.role.value}\n"
-            f"[white]Permission:[/white] {error.permission.name}\n\n"
-            f"[dim]Contact your AISec administrator to request elevated access.[/dim]",
-            title="[bold red]⛔ Permission Denied[/bold red]",
-            border_style="red",
-        )
-    )
-    console.print()
-
-
-def _print_rbac_help(
-    principal: Principal,
-    enforcer: RBACEnforcer,
-) -> None:
-    """Print help showing only commands this principal can use."""
-    permitted = set(enforcer.get_permitted_commands(principal))
-
-    all_commands = {
-        "queue": ("Show all pending events", Permission.VIEW_QUEUE),
-        "review": ("Review event N in detail", Permission.VIEW_EVENT_DETAIL),
-        "approve": ("Approve event N", Permission.APPROVE_EVENT),
-        "block": ("Block event N", Permission.BLOCK_EVENT),
-        "escalate": ("Escalate event N", Permission.ESCALATE_EVENT),
-        "stats": ("Show session statistics", Permission.VIEW_STATS),
-        "verify": ("Verify audit chain integrity", Permission.VERIFY_AUDIT_CHAIN),
-        "logs": ("Show last N audit log entries", Permission.VIEW_AUDIT_LOG),
-        "export": ("Export audit log to file", Permission.EXPORT_AUDIT_LOG),
-        "config": ("View system configuration", Permission.VIEW_SYSTEM_CONFIG),
-        "help": ("Show this help message", None),
-        "exit": ("Exit the SOC console", None),
-    }
-
-    lines = []
-    for cmd, (desc, perm) in all_commands.items():
-        if perm is None or cmd in permitted:
-            style = "bold cyan"
-            access = ""
-        else:
-            style = "dim"
-            access = " [red][no access][/red]"
-        lines.append(f"  [{style}]{cmd:<12}[/{style}] {desc}{access}")
-
-    console.print(
-        Panel(
-            "\n".join(lines),
-            title=f"[bold]Commands — Role: {principal.role.value.upper()}[/bold]",
-            border_style="dim",
-        )
+def _log_session_start(engine: Any, session: SOCSession) -> None:
+    """Log SOC session start."""
+    engine._logger.log(
+        record_type="soc_session_start",
+        record_id=session.principal_id,
+        payload={
+            "principal_id": session.principal_id,
+            "role": session.role,
+            "scenario": session.scenario,
+            "started_at": session.started_at,
+            "source": "soc_console",
+        },
     )
 
 
-# --- CHANGE 3: Replaced _run_soc_session with RBAC version ---
-
-
-def _run_soc_session(
-    queue: SOCQueue,
-    principal: Principal,
-    enforcer: RBACEnforcer,
-) -> None:
-    """
-    Run the interactive SOC analyst console session with RBAC enforcement.
-
-    Every command checks the principal's permissions before executing.
-    Denied commands show a clear access denied message — never crash.
-    """
-    prompt_style = Style.from_dict({"prompt": "ansicyan bold"})
-    session: PromptSession[str] = PromptSession()
-
-    console.print()
-    _print_soc_header(queue, principal.principal_id)
-
-    # Show role badge
-    role_style = "bold magenta" if principal.role.value == "admin" else "bold cyan"
-    console.print(
-        Text(f"  Role: ", style="white")
-        + Text(principal.role.value.upper(), style=role_style)
+def _log_session_end(engine: Any, session: SOCSession) -> None:
+    """Log SOC session end."""
+    engine._logger.log(
+        record_type="soc_session_end",
+        record_id=session.principal_id,
+        payload={
+            "principal_id": session.principal_id,
+            "role": session.role,
+            "scenario": session.scenario,
+            "ended_at": time.time(),
+            "source": "soc_console",
+        },
     )
-    console.print()
-
-    # Show only permitted commands
-    permitted = enforcer.get_permitted_commands(principal)
-    console.print(
-        Text(
-            f"  Permitted commands: {', '.join(permitted)}",
-            style="dim",
-        )
-    )
-    console.print(Text("  Type 'help' for details, 'exit' to quit.", style="dim"))
-    console.print()
-
-    while True:
-        try:
-            raw = session.prompt(
-                HTML(f"<prompt>soc:{principal.role.value}</prompt>> "),
-                style=prompt_style,
-            ).strip()
-        except (KeyboardInterrupt, EOFError):
-            break
-
-        if not raw:
-            continue
-
-        raw = raw[:256]
-        parts = raw.split()
-        cmd = parts[0].lower()
-
-        if cmd == "exit":
-            break
-
-        elif cmd == "help":
-            _print_rbac_help(principal, enforcer)
-
-        elif cmd == "queue":
-            try:
-                enforcer.enforce(principal, Permission.VIEW_QUEUE)
-                console.print()
-                _print_queue_table(queue)
-                console.print()
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        elif cmd == "review":
-            try:
-                enforcer.enforce(principal, Permission.VIEW_EVENT_DETAIL)
-                idx = _parse_index(parts, queue)
-                if idx is not None:
-                    _print_event_detail(queue.pending()[idx], idx + 1)
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        elif cmd == "approve":
-            try:
-                enforcer.enforce(principal, Permission.APPROVE_EVENT)
-                if not _check_rate_limit():
-                    continue
-                idx = _parse_index(parts, queue)
-                if idx is not None:
-                    result = queue.pending()[idx]
-                    _print_event_detail(result, idx + 1)
-                    if _confirm_action("approve", idx + 1):
-                        queue.resolve(
-                            result,
-                            "approve",
-                            principal.principal_id,
-                            reason="Analyst approved after review",
-                        )
-                        console.print(
-                            Text(
-                                f"  ✔ Event #{idx+1} approved and logged.",
-                                style="bold green",
-                            )
-                        )
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        elif cmd == "block":
-            try:
-                enforcer.enforce(principal, Permission.BLOCK_EVENT)
-                if not _check_rate_limit():
-                    continue
-                idx = _parse_index(parts, queue)
-                if idx is not None:
-                    result = queue.pending()[idx]
-                    _print_event_detail(result, idx + 1)
-                    if _confirm_action("block", idx + 1):
-                        queue.resolve(
-                            result,
-                            "block",
-                            principal.principal_id,
-                            reason="Analyst blocked after review",
-                        )
-                        console.print(
-                            Text(
-                                f"  ✘ Event #{idx+1} blocked and logged.",
-                                style="bold red",
-                            )
-                        )
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        elif cmd == "escalate":
-            try:
-                enforcer.enforce(principal, Permission.ESCALATE_EVENT)
-                if not _check_rate_limit():
-                    continue
-                idx = _parse_index(parts, queue)
-                if idx is not None:
-                    result = queue.pending()[idx]
-                    _print_event_detail(result, idx + 1)
-                    if _confirm_action("escalate", idx + 1):
-                        queue.resolve(
-                            result,
-                            "escalate",
-                            principal.principal_id,
-                            reason="Escalated to senior analyst",
-                        )
-                        console.print(
-                            Text(
-                                f"  ⬆ Event #{idx+1} escalated and logged.",
-                                style="bold magenta",
-                            )
-                        )
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        elif cmd == "stats":
-            try:
-                enforcer.enforce(principal, Permission.VIEW_STATS)
-                console.print()
-                _print_soc_header(queue, principal.principal_id)
-                console.print()
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        elif cmd == "verify":
-            try:
-                enforcer.enforce(principal, Permission.VERIFY_AUDIT_CHAIN)
-                console.print()
-                console.print(Text("  Verifying audit chain...", style="dim"))
-                ok, errors = queue.verify_chain()
-                if ok:
-                    console.print(
-                        Text(
-                            "  ✔ Audit chain INTACT — no tampering detected.",
-                            style="bold green",
-                        )
-                    )
-                else:
-                    console.print(
-                        Text(
-                            f"  ✘ Audit chain BROKEN — {len(errors)} error(s):",
-                            style="bold red",
-                        )
-                    )
-                    for err in errors:
-                        console.print(Text(f"    • {err}", style="red"))
-                console.print()
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        elif cmd == "logs":
-            try:
-                enforcer.enforce(principal, Permission.VIEW_AUDIT_LOG)
-                n = 10
-                if len(parts) >= 2:
-                    try:
-                        n = max(1, min(int(parts[1]), 100))
-                    except ValueError:
-                        pass
-                entries = queue.get_last_entries(n)
-                console.print()
-                console.print(
-                    Text(f"  Last {len(entries)} audit log entries:", style="dim")
-                )
-                for entry in entries:
-                    ts = entry.timestamp[11:19]
-                    payload = entry.payload
-                    action = payload.get(
-                        "action_type", payload.get("analyst_decision", "?")
-                    )
-                    decision = payload.get(
-                        "decision", payload.get("analyst_decision", "?")
-                    )
-                    console.print(
-                        Text(f"  [{ts}] ", style="dim")
-                        + Text(f"{entry.record_type:<18} ", style="cyan")
-                        + Text(f"{action:<28} ", style="white")
-                        + Text(f"{decision}", style="yellow")
-                    )
-                console.print()
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        elif cmd == "export":
-            try:
-                enforcer.enforce(principal, Permission.EXPORT_AUDIT_LOG)
-                console.print(Text("  Use: aisec logs --export <file>", style="dim"))
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        elif cmd == "config":
-            try:
-                enforcer.enforce(principal, Permission.VIEW_SYSTEM_CONFIG)
-                console.print()
-                console.print(
-                    Panel(
-                        f"[bold white]AISec System Configuration[/bold white]\n"
-                        f"Version:         1.0.0\n"
-                        f"Block threshold: 0.80\n"
-                        f"Review threshold: 0.60\n"
-                        f"Watch threshold:  0.30\n"
-                        f"Audit log:        .aisec/soc_session.jsonl",
-                        title="[bold]System Config[/bold]",
-                        border_style="cyan",
-                    )
-                )
-                console.print()
-            except AccessDeniedError as e:
-                _print_access_denied(e)
-
-        else:
-            console.print(
-                Text(
-                    f"  Unknown command: '{cmd}'. "
-                    "Type 'help' for available commands.",
-                    style="red",
-                )
-            )
 
 
-# --- CHANGE 2: Updated click command with --role option ---
+# ── Interactive command ───────────────────────────────────────────────────────
 
 
 @click.command("soc")
 @click.option(
-    "--analyst",
-    default="analyst_01",
+    "--role",
+    default="analyst",
+    type=click.Choice(["analyst", "admin"], case_sensitive=False),
     show_default=True,
-    help="Analyst identity recorded in the audit log.",
+    help="Local demo role: analyst or admin.",
 )
 @click.option(
-    "--role",
-    type=click.Choice(["analyst", "admin"], case_sensitive=False),
-    default="analyst",
+    "--principal-id",
+    default="soc_user",
+    help="Your identity. Logged in the audit trail.",
+)
+@click.option(
+    "--log-path",
+    type=click.Path(path_type=Path),
+    default=DEFAULT_LOG_PATH,
     show_default=True,
-    help="Role determines which commands are available.",
+    help="Path to the audit log.",
 )
 @click.option(
     "--scenario",
-    type=click.Choice(["trading_ai", "urban_ai", "both"], case_sensitive=False),
     default="both",
+    type=click.Choice(["trading_ai", "urban_ai", "drone", "both"]),
     show_default=True,
-    help="Scenario to pre-populate the review queue with.",
 )
 @click.option(
-    "--steps",
-    type=click.IntRange(min=1, max=200),
-    default=20,
-    show_default=True,
-    help="Number of agent actions to simulate before entering console.",
+    "--json",
+    "json_mode",
+    is_flag=True,
+    help="Print machine-readable JSON for supported displays.",
 )
-def soc_command(analyst: str, role: str, scenario: str, steps: int) -> None:
+def soc_command(
+    role: str,
+    principal_id: str,
+    log_path: Path,
+    scenario: str,
+    json_mode: bool,
+) -> None:
     """
-    Enter the interactive SOC analyst console.
+    Interactive SOC analyst console.
 
-    Simulates AI agent actions, populates the review queue
-    with flagged events, then opens an interactive console
-    where analysts can approve, block, or escalate them.
+    Review and resolve AI agent actions that require human approval.
+    All decisions are recorded in the tamper-evident audit log.
 
-    \b
     Examples:
         aisec soc
-        aisec soc --analyst senior_analyst --role admin
-        aisec soc --steps 30 --scenario trading_ai
+        aisec soc --role admin --principal-id admin_01
+        aisec soc --log-path /var/log/aisec/audit.jsonl
     """
-    # Sanitise analyst ID
-    analyst = "".join(c for c in analyst if c.isalnum() or c in "_.")[:32]
-    if len(analyst) < 3:
-        analyst = "analyst_01"
+    from aisec.core.engine import AnalysisEngine
+    from aisec.security.rbac import RBACEnforcer
 
-    # Create principal with role
-    try:
-        principal = create_principal(analyst, role)
-    except ValueError as exc:
-        console.print(Text(f"  Invalid role: {exc}", style="bold red"))
-        return
-
-    log_path = Path(".aisec") / "soc_session.jsonl"
-    engine = AnalysisEngine(log_path=log_path)
-    logger = AuditLogger(log_path=log_path)
-    queue = SOCQueue(audit_logger=logger)
+    principal = _build_principal(principal_id, role)
     enforcer = RBACEnforcer()
+    engine = AnalysisEngine(log_path=log_path)
 
-    console.print()
-    console.print(
-        Text("  Simulating agent actions — populating SOC queue...", style="dim")
+    session = SOCSession(
+        principal_id=principal.principal_id,
+        role=role.lower(),
+        scenario=scenario,
+        started_at=time.time(),
     )
 
-    import random
+    _display_header(role, scenario)
+    _log_session_start(engine, session)
 
-    trading_pool = TRADING_SAFE * 2 + TRADING_DANGEROUS
-    urban_pool = URBAN_SAFE * 3 + URBAN_DANGEROUS
-
-    trading_agent = TradingAgent(engine)
-    urban_agent = UrbanAgent(engine)
-
-    flagged = 0
-    for i in range(steps):
-        if scenario == "trading_ai":
-            action = random.choice(trading_pool)
-            result = trading_agent.attempt_action(action)
-        elif scenario == "urban_ai":
-            action = random.choice(urban_pool)
-            result = urban_agent.attempt_action(action)
-        else:
-            if i % 2 == 0:
-                action = random.choice(trading_pool)
-                result = trading_agent.attempt_action(action)
-            else:
-                action = random.choice(urban_pool)
-                result = urban_agent.attempt_action(action)
-
-        if result.analysis.decision == Decision.PENDING_REVIEW:
-            queue.submit(result)
-            flagged += 1
-
-    console.print(
-        Text(
-            f"  Simulation complete — {steps} actions, "
-            f"{flagged} events flagged for review.",
-            style="dim",
+    click.echo(f"\n  Logged in as: {principal.principal_id} ({role})")
+    click.echo(
+        click.style(
+            "  Note: local role selection is for demo/research use. "
+            "Production must authenticate identity before RBAC.",
+            fg="yellow",
         )
     )
 
-    # Enter interactive console with RBAC
-    _run_soc_session(queue, principal, enforcer)
+    try:
+        while True:
+            click.echo("\n  " + "─" * 60)
+            click.echo("  [q] Queue       [i] Inspect event     [m] Metrics")
+            click.echo("  [s] Safe State  [x] Exit")
+            if role.lower() == "admin":
+                click.echo("  [r] Release agent from safe state")
+            click.echo("  " + "─" * 60)
 
-    # Exit summary
-    console.print()
-    stats = queue.stats()
-    console.print(
-        Panel(
-            f"[bold white]Session complete[/bold white]\n"
-            f"Analyst:          {analyst}\n"
-            f"Role:             {role}\n"
-            f"Events reviewed:  {queue.resolved_count()}\n"
-            f"Approved:         [green]{stats['approve']}[/green]\n"
-            f"Blocked:          [red]{stats['block']}[/red]\n"
-            f"Escalated:        [magenta]{stats['escalate']}[/magenta]\n"
-            f"Still pending:    [yellow]{queue.pending_count()}[/yellow]",
-            title="[bold cyan]SOC Session Summary[/bold cyan]",
-            border_style="cyan",
-        )
-    )
-    console.print()
+            choice = click.prompt("  Command", default="q").strip().lower()
+
+            if choice == "x":
+                click.echo("\n  Session ended. Goodbye.\n")
+                break
+
+            if choice == "q":
+                status_input = click.prompt(
+                    "  Filter",
+                    default="all",
+                    type=click.Choice(
+                        ["pending", "escalated", "all"],
+                        case_sensitive=False,
+                    ),
+                ).lower()
+
+                status = QueueStatus(status_input)
+
+                unresolved = _display_queue(
+                    engine,
+                    enforcer,
+                    principal,
+                    status=status,
+                    limit=10,
+                    json_mode=json_mode,
+                )
+
+                if unresolved:
+                    resolve = click.prompt(
+                        "\n  Enter event number to resolve, or Enter to skip",
+                        default="",
+                    ).strip()
+
+                    if resolve.isdigit():
+                        index = int(resolve) - 1
+                        if 0 <= index < len(unresolved):
+                            selected = unresolved[index]
+                            decision = click.prompt(
+                                "  Decision",
+                                type=click.Choice(
+                                    [
+                                        "approve",
+                                        "block",
+                                        "escalate",
+                                        "false_positive",
+                                        "dismiss",
+                                    ],
+                                    case_sensitive=False,
+                                ),
+                            ).lower()
+                            reason = click.prompt(
+                                "  Reason",
+                                default="Reviewed in SOC console",
+                            )
+
+                            _resolve_event(
+                                selected.record_id,
+                                decision,
+                                engine,
+                                enforcer,
+                                principal,
+                                reason=reason,
+                            )
+                        else:
+                            click.echo("  Invalid event number.")
+
+                continue
+
+            if choice == "i":
+                event_id = click.prompt("  Event ID").strip()
+                _display_event_detail(
+                    engine,
+                    enforcer,
+                    principal,
+                    event_id,
+                    json_mode=json_mode,
+                )
+                continue
+
+            if choice == "m":
+                _display_metrics(
+                    engine,
+                    enforcer,
+                    principal,
+                    json_mode=json_mode,
+                )
+                continue
+
+            if choice == "s":
+                _display_safe_state(
+                    engine,
+                    enforcer,
+                    principal,
+                    json_mode=json_mode,
+                )
+                continue
+
+            if choice == "r" and role.lower() == "admin":
+                agent_id = click.prompt("  Agent ID to release").strip()
+                reason = click.prompt(
+                    "  Reason",
+                    default="Admin reviewed and released via SOC console",
+                )
+                _release_safe_state(
+                    agent_id,
+                    engine,
+                    enforcer,
+                    principal,
+                    reason=reason,
+                )
+                continue
+
+            click.echo("  Unknown command.")
+
+    finally:
+        _log_session_end(engine, session)
+
+
+# ── Optional standalone entry point ───────────────────────────────────────────
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Standalone entry point for python -m aisec.cli.soc."""
+    try:
+        args = list(argv) if argv is not None else None
+        soc_command.main(args=args, standalone_mode=True)
+        return 0
+    except SystemExit as exc:
+        code = exc.code
+        return int(code) if isinstance(code, int) else 0
+    except Exception as exc:
+        click.echo(f"ERROR: {exc}", err=True)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

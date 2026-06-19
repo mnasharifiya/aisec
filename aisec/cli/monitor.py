@@ -1,350 +1,328 @@
 """
 AISec live monitor CLI command.
-
-Streams AI agent actions in real time to the terminal,
-colour-coded by enforcement decision. Designed to feel
-like a professional security operations display.
-
-Security considerations:
-    - Monitor is read-only — it cannot modify decisions.
-    - Display data is sanitised before rendering.
-    - Long strings are truncated to prevent terminal overflow.
-    - The monitor cannot be used to approve or block actions.
-      That is exclusively the SOC console's responsibility.
-
-Usage:
-    aisec monitor --scenario trading_ai
-    aisec monitor --scenario urban_ai
-    aisec monitor --scenario both
-    aisec monitor --steps 50 --scenario trading_ai
 """
 
 from __future__ import annotations
 
+import json
+import random
 import time
 from pathlib import Path
+from typing import Any
 
 import click
-from rich.console import Console
-from rich.live import Live
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
-from aisec.agents.trading_agent import (
-    DANGEROUS_ACTIONS as TRADING_DANGEROUS,
-    SAFE_ACTIONS as TRADING_SAFE,
-    TradingAgent,
-)
-from aisec.agents.urban_agent import (
-    DANGEROUS_ACTIONS as URBAN_DANGEROUS,
-    SAFE_ACTIONS as URBAN_SAFE,
-    UrbanAgent,
-)
-from aisec.core.engine import AnalysisEngine, EngineResult
-from aisec.storage.models import Decision
-
-console = Console()
-
-# ── Display constants ─────────────────────────────────────────────────────────
-
-DECISION_STYLE: dict[Decision, tuple[str, str]] = {
-    Decision.ALLOW: ("ALLOW", "bold green"),
-    Decision.BLOCK: ("BLOCK", "bold red"),
-    Decision.ESCALATE: ("ESCALATE", "bold magenta"),
-    Decision.PENDING_REVIEW: ("REVIEW", "bold yellow"),
-}
-
-MAX_ACTION_LEN: int = 28
-MAX_TARGET_LEN: int = 22
-MAX_EXPLANATION_LEN: int = 55
-PAUSE_BETWEEN_STEPS: float = 0.35  # seconds — realistic streaming feel
+from aisec.storage.audit import DEFAULT_LOG_PATH
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+def _decision_name(decision: Any) -> str:
+    if hasattr(decision, "name"):
+        return str(decision.name)
+    return str(decision)
 
 
-def _truncate(s: str, max_len: int) -> str:
-    """Truncate a string to max_len characters with ellipsis."""
-    s = str(s).strip()
-    if len(s) <= max_len:
-        return s
-    return s[: max_len - 1] + "…"
+def _decision_label_color(decision: Any) -> tuple[str, str]:
+    name = _decision_name(decision).upper()
+
+    if name == "ALLOW":
+        return "ALLOW", "green"
+    if name == "BLOCK":
+        return "BLOCK", "red"
+    if name == "ESCALATE":
+        return "ESCALATE", "red"
+    if name == "PENDING_REVIEW":
+        return "REVIEW", "yellow"
+
+    return name, "white"
 
 
-def _decision_badge(decision: Decision) -> Text:
-    """Return a styled Rich Text badge for the given decision."""
-    label, style = DECISION_STYLE.get(
-        decision,
-        (decision.value, "white"),
-    )
-    # Pad to fixed width so columns stay aligned
-    padded = label.ljust(8)
-    return Text(padded, style=style)
-
-
-def _risk_bar(score: float) -> str:
-    """
-    Convert a risk score in [0.0, 1.0] to a visual bar.
-
-    Example: 0.75 → '███████░░░ 0.75'
-    """
-    filled = int(score * 10)
-    empty = 10 - filled
-    bar = "█" * filled + "░" * empty
-    return f"{bar} {score:.2f}"
-
-
-def _risk_style(score: float) -> str:
-    """Return a Rich style string based on the risk score."""
-    if score >= 0.80:
-        return "bold red"
-    if score >= 0.60:
-        return "bold yellow"
-    if score >= 0.30:
+def _risk_color(score: float) -> str:
+    if score >= 0.90:
+        return "red"
+    if score >= 0.70:
         return "yellow"
+    if score >= 0.30:
+        return "cyan"
     return "green"
 
 
-# ── Table builder ─────────────────────────────────────────────────────────────
+def _safe_alert_name(alert: Any) -> str:
+    threat = getattr(alert, "threat", None)
+    if hasattr(threat, "name"):
+        return str(threat.name)
+    return str(threat or "UNKNOWN")
 
 
-def _build_table(results: list[EngineResult], scenario_label: str) -> Table:
-    """
-    Build a Rich Table from a list of EngineResults.
-
-    The table is rebuilt on every update so Rich can
-    animate it smoothly inside the Live context.
-    """
-    table = Table(
-        title=f"[bold cyan]AISec Live Monitor — {scenario_label}[/bold cyan]",
-        show_header=True,
-        header_style="bold white on dark_blue",
-        border_style="dim",
-        expand=True,
-        show_lines=True,
-    )
-
-    table.add_column("Time", style="dim", width=10, no_wrap=True)
-    table.add_column("Decision", width=10, no_wrap=True)
-    table.add_column("Agent", style="cyan", width=16, no_wrap=True)
-    table.add_column("Action", style="white", width=30, no_wrap=True)
-    table.add_column("Target", style="dim white", width=24, no_wrap=True)
-    table.add_column("Risk", width=18, no_wrap=True)
-    table.add_column("Explanation", style="dim", min_width=30)
-
-    for result in results:
-        ts = result.event.timestamp[11:19]  # HH:MM:SS
-        decision = _decision_badge(result.analysis.decision)
-        agent = _truncate(result.event.agent_id, 16)
-        action = _truncate(result.event.action_type, MAX_ACTION_LEN)
-        target = _truncate(result.event.target, MAX_TARGET_LEN)
-        risk = _risk_bar(result.analysis.risk_score)
-        risk_style = _risk_style(result.analysis.risk_score)
-        explanation = _truncate(result.analysis.explanation, MAX_EXPLANATION_LEN)
-
-        table.add_row(
-            ts,
-            decision,
-            agent,
-            action,
-            target,
-            Text(risk, style=risk_style),
-            explanation,
-        )
-
-    return table
-
-
-def _build_summary_panel(results: list[EngineResult]) -> Panel:
-    """Build a summary statistics panel shown below the event table."""
-    total = len(results)
-    blocked = sum(1 for r in results if r.analysis.decision == Decision.BLOCK)
-    escalate = sum(1 for r in results if r.analysis.decision == Decision.ESCALATE)
-    review = sum(1 for r in results if r.analysis.decision == Decision.PENDING_REVIEW)
-    allowed = sum(1 for r in results if r.analysis.decision == Decision.ALLOW)
-
-    avg_risk = sum(r.analysis.risk_score for r in results) / total if total > 0 else 0.0
-
-    summary = (
-        f"[bold white]Events:[/] {total}   "
-        f"[bold red]Blocked:[/] {blocked}   "
-        f"[bold magenta]Escalated:[/] {escalate}   "
-        f"[bold yellow]Review:[/] {review}   "
-        f"[bold green]Allowed:[/] {allowed}   "
-        f"[cyan]Avg Risk:[/] {avg_risk:.3f}"
-    )
-
-    return Panel(summary, title="[bold]Session Summary[/bold]", border_style="dim")
-
-
-# ── Click command ─────────────────────────────────────────────────────────────
+def _safe_alert_severity(alert: Any) -> str:
+    severity = getattr(alert, "severity", "unknown")
+    if hasattr(severity, "name"):
+        return str(severity.name)
+    return str(severity)
 
 
 @click.command("monitor")
 @click.option(
     "--scenario",
-    type=click.Choice(["trading_ai", "urban_ai", "both"], case_sensitive=False),
-    default="both",
+    default="trading_ai",
+    type=click.Choice(["trading_ai", "urban_ai", "both"]),
     show_default=True,
-    help="Which AI scenario to simulate.",
+    help="Scenario to simulate.",
 )
 @click.option(
     "--steps",
-    type=click.IntRange(min=1, max=500),
-    default=30,
+    type=click.IntRange(1, 100_000),
+    default=20,
     show_default=True,
-    help="Number of agent actions to simulate.",
+    help="Number of events to simulate.",
 )
 @click.option(
-    "--speed",
-    type=click.FloatRange(min=0.0, max=5.0),
-    default=PAUSE_BETWEEN_STEPS,
+    "--delay",
+    type=click.FloatRange(0.0, 60.0),
+    default=0.1,
     show_default=True,
-    help="Seconds between events (0 = as fast as possible).",
+    help="Delay between events in seconds.",
 )
-def monitor_command(scenario: str, steps: int, speed: float) -> None:
+@click.option(
+    "--seed",
+    type=int,
+    default=None,
+    help="Random seed for reproducible simulations.",
+)
+@click.option(
+    "--json",
+    "json_mode",
+    is_flag=True,
+    help="Print JSON lines instead of table output.",
+)
+@click.option(
+    "--log-path",
+    type=click.Path(path_type=Path),
+    default=DEFAULT_LOG_PATH,
+    show_default=True,
+    help="Path to AISec audit log.",
+)
+def monitor_command(
+    scenario: str,
+    steps: int,
+    delay: float,
+    seed: int | None,
+    json_mode: bool,
+    log_path: Path,
+) -> None:
     """
-    Stream AI agent actions live in the terminal.
-
-    Simulates the selected scenario and displays every action
-    as it is evaluated by the AISec analysis engine.
-
-    \\b
-    Examples:
-        aisec monitor
-        aisec monitor --scenario trading_ai --steps 20
-        aisec monitor --scenario both --speed 0.5
+    Live stream of AISec agent activity.
     """
-    log_path = Path(".aisec") / "monitor_session.jsonl"
+    from aisec.core.engine import AnalysisEngine
+    from aisec.storage.models import Event, Scenario
+
+    if seed is not None:
+        random.seed(seed)
+
     engine = AnalysisEngine(log_path=log_path)
 
-    scenario_label = {
-        "trading_ai": "Scenario A — Autonomous Trading AI",
-        "urban_ai": "Scenario B — Smart City Urban AI",
-        "both": "Scenario A + B — Trading AI & Urban AI",
-    }[scenario]
+    trading_actions = [
+        ("read_market_data", Scenario.TRADING_AI, "MARKET", {}),
+        ("read_market_data", Scenario.TRADING_AI, "MARKET", {}),
+        ("read_market_data", Scenario.TRADING_AI, "MARKET", {}),
+        ("execute_trade", Scenario.TRADING_AI, "MARKET", {"amount": 50_000}),
+        ("execute_trade", Scenario.TRADING_AI, "MARKET", {"amount": 500_000}),
+        ("execute_large_trade", Scenario.TRADING_AI, "MARKET", {"amount": 2_400_000}),
+        ("manipulate_news_feed", Scenario.TRADING_AI, "MARKET", {}),
+        ("override_risk_limit", Scenario.TRADING_AI, "MARKET", {}),
+        (
+            "execute_trade",
+            Scenario.TRADING_AI,
+            "MARKET",
+            {"amount": 800, "after_hours": True},
+        ),
+    ]
 
-    console.print()
-    console.print(
-        Text(f"  Starting live monitor — {scenario_label}", style="bold cyan")
-    )
-    console.print(
-        Text(
-            f"  Simulating {steps} actions | speed={speed}s | Ctrl+C to stop",
-            style="dim",
+    urban_actions = [
+        ("read_sensor", Scenario.URBAN_AI, "city_system", {}),
+        ("read_sensor", Scenario.URBAN_AI, "city_system", {}),
+        ("adjust_traffic_flow", Scenario.URBAN_AI, "city_system", {}),
+        (
+            "mass_traffic_redirect",
+            Scenario.URBAN_AI,
+            "city_system",
+            {"affected_intersections": 10},
+        ),
+        (
+            "mass_traffic_redirect",
+            Scenario.URBAN_AI,
+            "city_system",
+            {"affected_intersections": 120},
+        ),
+        (
+            "set_curfew",
+            Scenario.URBAN_AI,
+            "city_system",
+            {"zone": "ALL", "duration_hours": 48},
+        ),
+        (
+            "shutdown_power_grid",
+            Scenario.URBAN_AI,
+            "city_system",
+            {"zone": "North"},
+        ),
+        (
+            "adjust_routing",
+            Scenario.URBAN_AI,
+            "city_system",
+            {"target": "ambulance_routing"},
+        ),
+    ]
+
+    if scenario == "trading_ai":
+        pool = trading_actions
+    elif scenario == "urban_ai":
+        pool = urban_actions
+    else:
+        pool = trading_actions + urban_actions
+
+    blocked = 0
+    reviewed = 0
+    escalated = 0
+    temporal_count = 0
+    correlation_count = 0
+    safe_state_blocks = 0
+    start = time.perf_counter()
+
+    if not json_mode:
+        click.echo(f"\n  AISec Live Monitor -- {scenario} -- {steps} events")
+        click.echo(f"  Log path: {log_path}")
+        if seed is not None:
+            click.echo(f"  Seed: {seed}")
+        click.echo(f"  {'-' * 72}")
+        click.echo(f"  {'#':>4}  {'Action':<30} {'Risk':>6}  {'Decision':<14} Agent")
+        click.echo(f"  {'-' * 72}")
+
+    for index in range(1, steps + 1):
+        action_type, scen, target, payload = random.choice(pool)
+        agent_id = f"agent_{((index - 1) % 3) + 1:02d}"
+
+        event = Event(
+            action_type=action_type,
+            agent_id=agent_id,
+            target=target,
+            scenario=scen,
+            raw_payload=dict(payload),
         )
-    )
-    console.print()
 
-    results: list[EngineResult] = []
+        before = time.perf_counter()
+        result = engine.analyse(event)
+        latency_ms = (time.perf_counter() - before) * 1000
 
-    # Build agent list based on scenario selection
-    agents = []
-    if scenario in ("trading_ai", "both"):
-        agents.append(("trading", TradingAgent(engine)))
-    if scenario in ("urban_ai", "both"):
-        agents.append(("urban", UrbanAgent(engine)))
+        risk_score = float(getattr(result, "risk_score", 0.0))
+        decision = getattr(result, "decision", "UNKNOWN")
+        decision_name = _decision_name(decision).upper()
+        label, color = _decision_label_color(decision)
 
-    # Pre-build action sequences
-    action_sequence = _build_action_sequence(scenario, steps)
+        result_blocked = bool(getattr(result, "blocked", False))
+        temporal_alerts = getattr(result, "temporal_alerts", []) or []
+        correlation_alerts = getattr(result, "correlation_alerts", []) or []
+        safe_state_block = bool(getattr(result, "safe_state_block", False))
 
-    try:
-        with Live(
-            _build_table(results, scenario_label),
-            console=console,
-            refresh_per_second=4,
-            vertical_overflow="visible",
-        ) as live:
+        if result_blocked:
+            blocked += 1
+        if decision_name == "PENDING_REVIEW":
+            reviewed += 1
+        if decision_name == "ESCALATE":
+            escalated += 1
+        if safe_state_block:
+            safe_state_blocks += 1
 
-            for agent_name, action in action_sequence:
-                # Find the right agent
-                agent_obj = next((a for name, a in agents if name == agent_name), None)
-                if agent_obj is None:
-                    continue
+        temporal_count += len(temporal_alerts)
+        correlation_count += len(correlation_alerts)
 
-                # Execute through agent (fully intercepted by engine)
-                result = agent_obj.attempt_action(action)
-                results.append(result)
+        if json_mode:
+            click.echo(
+                json.dumps(
+                    {
+                        "index": index,
+                        "scenario": scenario,
+                        "agent_id": agent_id,
+                        "action_type": action_type,
+                        "target": target,
+                        "risk_score": risk_score,
+                        "decision": decision_name,
+                        "blocked": result_blocked,
+                        "safe_state_block": safe_state_block,
+                        "temporal_alert_count": len(temporal_alerts),
+                        "correlation_alert_count": len(correlation_alerts),
+                        "latency_ms": latency_ms,
+                    },
+                    sort_keys=True,
+                )
+            )
+        else:
+            prefix = "X" if result_blocked else "+"
+            risk_text = click.style(f"{risk_score:>6.3f}", fg=_risk_color(risk_score))
 
-                # Update the live display
-                from rich.console import Group
+            click.echo(
+                f"  {index:>4}  {prefix} {action_type:<30} "
+                f"{risk_text}  "
+                + click.style(f"{label:<14}", fg=color)
+                + f" {agent_id}  {latency_ms:.1f}ms"
+            )
 
-                live.update(
-                    Group(
-                        _build_table(results, scenario_label),
-                        _build_summary_panel(results),
+            for alert in temporal_alerts:
+                click.echo(
+                    click.style(
+                        f"        ! TEMPORAL: {_safe_alert_name(alert)} "
+                        f"[{_safe_alert_severity(alert)}]",
+                        fg="yellow",
                     )
                 )
 
-                if speed > 0:
-                    time.sleep(speed)
+            for alert in correlation_alerts:
+                click.echo(
+                    click.style(
+                        f"        ! CORRELATION: {_safe_alert_name(alert)} "
+                        f"[{_safe_alert_severity(alert)}]",
+                        fg="magenta",
+                    )
+                )
 
-    except KeyboardInterrupt:
-        console.print()
-        console.print(Text("  Monitor stopped by user.", style="yellow"))
+            if safe_state_block:
+                click.echo(
+                    click.style(
+                        "        SAFE STATE BLOCK -- agent restricted",
+                        fg="red",
+                    )
+                )
 
-    # Final summary
-    console.print()
-    _print_final_summary(results, engine)
+        if delay > 0:
+            time.sleep(delay)
 
+    duration = max(time.perf_counter() - start, 0.0001)
+    throughput = steps / duration
 
-def _build_action_sequence(scenario: str, steps: int) -> list[tuple[str, object]]:
-    """
-    Build a mixed action sequence for the given scenario.
+    summary = {
+        "type": "summary",
+        "events": steps,
+        "blocked": blocked,
+        "pending_review": reviewed,
+        "escalated": escalated,
+        "safe_state_blocks": safe_state_blocks,
+        "temporal_alerts": temporal_count,
+        "correlation_alerts": correlation_count,
+        "block_rate_percent": blocked / steps * 100,
+        "events_per_second": throughput,
+    }
 
-    Returns a list of (agent_name, action) tuples.
-    For 'both', actions alternate between trading and urban.
-    """
-    import random  # Non-cryptographic — simulation only, not security-sensitive
+    if json_mode:
+        click.echo(json.dumps(summary, sort_keys=True))
+        return
 
-    sequence = []
-
-    trading_pool = TRADING_SAFE * 2 + TRADING_DANGEROUS
-    urban_pool = URBAN_SAFE * 3 + URBAN_DANGEROUS
-
-    for i in range(steps):
-        if scenario == "trading_ai":
-            sequence.append(("trading", random.choice(trading_pool)))
-        elif scenario == "urban_ai":
-            sequence.append(("urban", random.choice(urban_pool)))
-        else:
-            # Alternate between trading and urban
-            if i % 2 == 0:
-                sequence.append(("trading", random.choice(trading_pool)))
-            else:
-                sequence.append(("urban", random.choice(urban_pool)))
-
-    return sequence
-
-
-def _print_final_summary(results: list[EngineResult], engine: AnalysisEngine) -> None:
-    """Print a final security summary after the simulation ends."""
-    total = len(results)
-    blocked = sum(1 for r in results if r.analysis.decision == Decision.BLOCK)
-    escalate = sum(1 for r in results if r.analysis.decision == Decision.ESCALATE)
-    review = sum(1 for r in results if r.analysis.decision == Decision.PENDING_REVIEW)
-    allowed = sum(1 for r in results if r.analysis.decision == Decision.ALLOW)
-
-    ok, errors = engine.verify_audit_chain()
-    chain_status = (
-        Text("✔ INTACT", style="bold green")
-        if ok
-        else Text(f"✘ BROKEN ({len(errors)} errors)", style="bold red")
+    click.echo(f"  {'-' * 72}")
+    click.echo(
+        f"  Complete: {steps} events, {blocked} blocked "
+        f"({blocked / steps * 100:.1f}% block rate)"
     )
-
-    console.print(
-        Panel(
-            f"[bold white]Total events:[/]    {total}\n"
-            f"[bold red]Blocked:[/]          {blocked}\n"
-            f"[bold magenta]Escalated:[/]       {escalate}\n"
-            f"[bold yellow]Under review:[/]    {review}\n"
-            f"[bold green]Allowed:[/]          {allowed}\n"
-            f"[cyan]Audit chain:[/]      ",
-            title="[bold cyan]AISec Session Complete[/bold cyan]",
-            border_style="cyan",
-        )
+    click.echo(
+        f"  Review: {reviewed} pending, {escalated} escalated, "
+        f"{safe_state_blocks} safe-state blocks"
     )
-    console.print(f"  Audit chain integrity: ", end="")
-    console.print(chain_status)
-    console.print()
+    click.echo(f"  Alerts: {temporal_count} temporal, {correlation_count} correlation")
+    click.echo(f"  Throughput: {throughput:.2f} events/sec\n")

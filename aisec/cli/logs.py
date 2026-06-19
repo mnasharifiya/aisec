@@ -1,366 +1,424 @@
 """
-AISec audit log CLI command.
-
-Provides commands to inspect and verify the tamper-evident
-audit log directly from the terminal.
-
-Security considerations:
-    - All operations are strictly read-only.
-    - verify subcommand re-computes every hash in the chain.
-    - Any broken link is reported with exact entry location.
-    - Export produces a plain JSONL file — no hash modification.
-
-Usage:
-    aisec logs
-    aisec logs --tail 20
-    aisec logs --verify
-    aisec logs --export audit_export.jsonl
+AISec audit log inspection CLI command.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
-from aisec.storage.audit import AuditLogger, DEFAULT_LOG_PATH
+from aisec.storage.audit import DEFAULT_LOG_PATH
 
-console = Console()
-
-
-# ── Display helpers ───────────────────────────────────────────────────────────
-
-
-def _truncate(s: str, n: int) -> str:
-    """Truncate string to n characters with ellipsis."""
-    s = str(s)
-    return s if len(s) <= n else s[: n - 1] + "…"
+REDACT_KEYS = {
+    "token",
+    "secret",
+    "password",
+    "api_key",
+    "apikey",
+    "authorization",
+    "credential",
+    "credentials",
+    "private_key",
+}
 
 
-def _payload_summary(payload: dict) -> str:
-    """
-    Produce a concise one-line summary of an audit log payload.
-
-    Shows the most relevant fields depending on record type.
-    """
-    if not payload:
-        return "[empty]"
-
-    # Analysis entry
-    if "action_type" in payload and "decision" in payload:
-        action = payload.get("action_type", "?")
-        decision = payload.get("decision", "?")
-        agent = payload.get("agent_id", "?")
-        risk = payload.get("risk_score", 0.0)
-        return f"{agent} | {action} | {decision} | risk={risk:.3f}"
-
-    # Analyst decision entry
-    if "analyst_decision" in payload:
-        analyst = payload.get("analyst_id", "?")
-        decision = payload.get("analyst_decision", "?")
-        action = payload.get("action_type", "?")
-        return f"analyst={analyst} | {decision} | {action}"
-
-    # Generic fallback — show first two key/value pairs
-    items = list(payload.items())[:2]
-    return "  ".join(f"{k}={v}" for k, v in items)
+RECORD_TYPES = [
+    "all",
+    "analysis",
+    "temporal_alert",
+    "temporal_anomaly",
+    "correlation_alert",
+    "multi_agent_correlation",
+    "safe_state_entry",
+    "safe_state_enter",
+    "safe_state_exit",
+    "analyst_decision",
+    "soc_session_start",
+    "soc_session_end",
+]
 
 
-def _decision_style(payload: dict) -> str:
-    """Return a Rich style string based on the decision in the payload."""
-    decision = payload.get("decision", payload.get("analyst_decision", ""))
-    styles = {
-        "BLOCK": "bold red",
-        "ESCALATE": "bold magenta",
-        "PENDING_REVIEW": "bold yellow",
-        "ALLOW": "green",
-        "block": "bold red",
-        "approve": "green",
-        "escalate": "bold magenta",
+def _payload(entry: Any) -> dict[str, Any]:
+    payload = getattr(entry, "payload", {}) or {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _timestamp(entry: Any) -> str:
+    return str(getattr(entry, "timestamp", ""))[:19] or "-"
+
+
+def _record_id(entry: Any) -> str:
+    return str(getattr(entry, "record_id", "unknown"))
+
+
+def _record_type(entry: Any) -> str:
+    return str(getattr(entry, "record_type", "unknown"))
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _decision_color(decision: str) -> str:
+    decision = decision.upper()
+    if decision in {"BLOCK", "ESCALATE"}:
+        return "red"
+    if decision in {"PENDING_REVIEW", "REVIEW"}:
+        return "yellow"
+    return "green"
+
+
+def _redact(value: Any) -> Any:
+    if isinstance(value, dict):
+        clean: dict[str, Any] = {}
+        for key, item in value.items():
+            key_text = str(key).lower()
+            if any(secret in key_text for secret in REDACT_KEYS):
+                clean[key] = "***REDACTED***"
+            else:
+                clean[key] = _redact(item)
+        return clean
+
+    if isinstance(value, list):
+        return [_redact(item) for item in value]
+
+    return value
+
+
+def _short(value: Any, limit: int = 80) -> str:
+    text = str(value)
+    text = text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)] + "…"
+
+
+def _entry_to_json(entry: Any, *, redact: bool) -> dict[str, Any]:
+    payload = _payload(entry)
+    if redact:
+        payload = _redact(payload)
+
+    return {
+        "timestamp": str(getattr(entry, "timestamp", "")),
+        "record_type": _record_type(entry),
+        "record_id": _record_id(entry),
+        "payload": payload,
     }
-    return styles.get(decision, "white")
 
 
-# ── Click command ─────────────────────────────────────────────────────────────
+def _matches_filters(
+    entry: Any,
+    *,
+    record_type: str,
+    agent_id: str | None,
+    decision: str | None,
+    contains: str | None,
+) -> bool:
+    payload = _payload(entry)
+
+    if record_type != "all" and _record_type(entry) != record_type:
+        return False
+
+    if agent_id and str(payload.get("agent_id", "")) != agent_id:
+        return False
+
+    if decision and str(payload.get("decision", "")).upper() != decision.upper():
+        return False
+
+    if contains:
+        haystack = json.dumps(
+            _entry_to_json(entry, redact=True),
+            sort_keys=True,
+            ensure_ascii=False,
+        ).lower()
+        if contains.lower() not in haystack:
+            return False
+
+    return True
+
+
+def _print_analysis(entry: Any) -> None:
+    payload = _payload(entry)
+    decision = str(payload.get("decision", "?"))
+    risk = _safe_float(payload.get("risk_score", 0.0))
+
+    click.echo(
+        f"  {_timestamp(entry)}  "
+        f"{_record_type(entry):<22}  "
+        f"{_short(payload.get('action_type', '?'), 28):<28}  "
+        + click.style(f"{decision:<15}", fg=_decision_color(decision))
+        + f"  risk={risk:.3f}"
+    )
+
+
+def _print_alert(entry: Any, *, color: str) -> None:
+    payload = _payload(entry)
+
+    click.echo(
+        click.style(
+            f"  {_timestamp(entry)}  "
+            f"{_record_type(entry):<22}  "
+            f"{_short(payload.get('threat', '?'), 28):<28}  "
+            f"{_short(payload.get('severity', '?'), 16)}",
+            fg=color,
+        )
+    )
+
+
+def _print_safe_state(entry: Any, *, color: str) -> None:
+    payload = _payload(entry)
+
+    click.echo(
+        click.style(
+            f"  {_timestamp(entry)}  "
+            f"{_record_type(entry):<22}  "
+            f"agent={_short(payload.get('agent_id', '?'), 20):<20}  "
+            f"trigger={_short(payload.get('triggered_by', '?'), 20)}",
+            fg=color,
+        )
+    )
+
+
+def _print_analyst_decision(entry: Any) -> None:
+    payload = _payload(entry)
+
+    click.echo(
+        click.style(
+            f"  {_timestamp(entry)}  "
+            f"{_record_type(entry):<22}  "
+            f"analyst={_short(payload.get('analyst_id', '?'), 16):<16}  "
+            f"decision={_short(payload.get('analyst_decision', '?'), 20)}",
+            fg="cyan",
+        )
+    )
+
+
+def _print_default(entry: Any, *, redact: bool) -> None:
+    payload = _payload(entry)
+    if redact:
+        payload = _redact(payload)
+
+    click.echo(
+        f"  {_timestamp(entry)}  "
+        f"{_record_type(entry):<22}  "
+        f"{_short(payload, 80)}"
+    )
+
+
+def _print_entry(entry: Any, *, redact: bool) -> None:
+    rtype = _record_type(entry)
+
+    if rtype == "analysis":
+        _print_analysis(entry)
+    elif rtype in {"temporal_alert", "temporal_anomaly"}:
+        _print_alert(entry, color="yellow")
+    elif rtype in {"correlation_alert", "multi_agent_correlation"}:
+        _print_alert(entry, color="magenta")
+    elif rtype in {"safe_state_entry", "safe_state_enter"}:
+        _print_safe_state(entry, color="red")
+    elif rtype == "safe_state_exit":
+        _print_safe_state(entry, color="green")
+    elif rtype == "analyst_decision":
+        _print_analyst_decision(entry)
+    else:
+        _print_default(entry, redact=redact)
 
 
 @click.command("logs")
 @click.option(
-    "--log",
-    type=click.Path(exists=False, path_type=Path),
+    "--log-path",
+    type=click.Path(path_type=Path),
     default=DEFAULT_LOG_PATH,
     show_default=True,
-    help="Path to the audit log file.",
+    help="Path to AISec audit log.",
+)
+@click.option(
+    "--verify",
+    is_flag=True,
+    help="Verify hash-chain integrity.",
 )
 @click.option(
     "--tail",
-    type=click.IntRange(min=1, max=10_000),
+    type=click.IntRange(1, 10_000),
     default=20,
     show_default=True,
     help="Number of recent entries to display.",
 )
 @click.option(
-    "--verify",
-    "do_verify",
+    "--type",
+    "record_type",
+    default="all",
+    type=click.Choice(RECORD_TYPES),
+    show_default=True,
+    help="Filter by record type.",
+)
+@click.option(
+    "--agent-id",
+    default=None,
+    help="Filter by agent ID.",
+)
+@click.option(
+    "--decision",
+    default=None,
+    help="Filter analysis entries by decision.",
+)
+@click.option(
+    "--contains",
+    default=None,
+    help="Search within redacted entry JSON.",
+)
+@click.option(
+    "--json",
+    "json_mode",
     is_flag=True,
-    default=False,
-    help="Verify the full hash chain integrity.",
+    help="Print entries as JSON.",
+)
+@click.option(
+    "--no-redact",
+    is_flag=True,
+    help="Show full payload values. Use carefully.",
 )
 @click.option(
     "--export",
+    "export_path",
     type=click.Path(path_type=Path),
     default=None,
-    help="Export all log entries to a JSONL file.",
+    help="Export audit log in CEF format.",
 )
 @click.option(
-    "--filter-decision",
-    "filter_decision",
-    type=click.Choice(
-        ["ALLOW", "BLOCK", "ESCALATE", "PENDING_REVIEW"],
-        case_sensitive=False,
-    ),
-    default=None,
-    help="Show only entries with the given decision.",
+    "--fail-on-broken-chain",
+    is_flag=True,
+    help="Exit with non-zero status if chain verification fails.",
 )
 def logs_command(
-    log: Path,
+    log_path: Path,
+    verify: bool,
     tail: int,
-    do_verify: bool,
-    export: Path | None,
-    filter_decision: str | None,
+    record_type: str,
+    agent_id: str | None,
+    decision: str | None,
+    contains: str | None,
+    json_mode: bool,
+    no_redact: bool,
+    export_path: Path | None,
+    fail_on_broken_chain: bool,
 ) -> None:
     """
-    Inspect and verify the AISec tamper-evident audit log.
+    Inspect the tamper-evident AISec audit log.
 
-    Displays recent log entries in a readable table format.
-    Use --verify to check the full hash chain integrity.
-    Use --export to save a copy of the log to a new file.
-
-    \\b
     Examples:
         aisec logs
-        aisec logs --tail 50
         aisec logs --verify
-        aisec logs --filter-decision BLOCK
-        aisec logs --export backup.jsonl
+        aisec logs --tail 50 --type analysis
+        aisec logs --agent-id agent_01 --decision BLOCK
+        aisec logs --json
+        aisec logs --export ./siem_export.cef
     """
-    console.print()
+    from aisec.core.engine import AnalysisEngine
+    from aisec.integrations.siem import SIEMExporter
 
-    # ── Check log exists ──────────────────────────────────────────────────────
-    if not log.exists():
-        console.print(
-            Panel(
-                f"[yellow]Audit log not found: {log}[/yellow]\n\n"
-                "[dim]Run 'aisec monitor' or 'aisec soc' to generate audit data.[/dim]",
-                title="[bold]AISec Audit Log[/bold]",
-                border_style="yellow",
-            )
-        )
-        return
-
-    logger = AuditLogger(log_path=log)
-    entries = logger.get_all()
-    total = len(entries)
-
-    if total == 0:
-        console.print(
-            Panel(
-                "[yellow]Audit log is empty.[/yellow]",
-                title="[bold]AISec Audit Log[/bold]",
-                border_style="yellow",
-            )
-        )
-        return
-
-    # ── Export ────────────────────────────────────────────────────────────────
-    if export is not None:
-        _export_log(entries, export)
-        return
-
-    # ── Verify chain ──────────────────────────────────────────────────────────
-    if do_verify:
-        _verify_chain(logger, total)
-        return
-
-    # ── Display entries ───────────────────────────────────────────────────────
-    display_entries = entries[-tail:]
-
-    # Apply decision filter if requested
-    if filter_decision:
-        fd = filter_decision.upper()
-        display_entries = [
-            e
-            for e in display_entries
-            if e.payload.get("decision", "").upper() == fd
-            or e.payload.get("analyst_decision", "").upper() == fd
-        ]
-
-    console.print(
-        Text(
-            f"  AISec Audit Log — {total} total entries "
-            f"(showing {len(display_entries)})",
-            style="bold cyan",
-        )
-    )
-    console.print(Text(f"  Log: {log}", style="dim"))
-    console.print()
-
-    _display_entries_table(display_entries)
-
-    # Quick chain status at the bottom
-    ok, errors = logger.verify_chain()
-    if ok:
-        console.print(
-            Text(
-                f"  ✔ Chain intact — {total} entries verified.",
-                style="bold green",
-            )
-        )
-    else:
-        console.print(
-            Text(
-                f"  ✘ Chain BROKEN — {len(errors)} error(s). "
-                "Run 'aisec logs --verify' for details.",
-                style="bold red",
-            )
-        )
-    console.print()
-
-
-def _display_entries_table(entries: list) -> None:
-    """Render audit log entries as a Rich table."""
-    if not entries:
-        console.print(Text("  No entries match the current filter.", style="dim"))
-        return
-
-    table = Table(
-        show_header=True,
-        header_style="bold white on dark_blue",
-        border_style="dim",
-        expand=True,
-        show_lines=False,
-    )
-
-    table.add_column("Time", width=10, no_wrap=True, style="dim")
-    table.add_column("Type", width=18, no_wrap=True, style="cyan")
-    table.add_column("Record ID", width=12, no_wrap=True, style="dim")
-    table.add_column("Summary", min_width=40)
-    table.add_column("Hash", width=12, no_wrap=True, style="dim")
-
-    for entry in entries:
-        ts = entry.timestamp[11:19]
-        rec_type = _truncate(entry.record_type, 18)
-        rec_id = _truncate(entry.record_id, 12)
-        summary = _payload_summary(entry.payload)
-        style = _decision_style(entry.payload)
-        hash_str = entry.current_hash[:10] + "…"
-
-        table.add_row(
-            ts,
-            rec_type,
-            rec_id,
-            Text(_truncate(summary, 70), style=style),
-            hash_str,
+    if not log_path.exists():
+        raise click.ClickException(
+            f"Audit log not found: {log_path}. Run events first with aisec monitor."
         )
 
-    console.print(table)
-    console.print()
+    engine = AnalysisEngine(log_path=log_path)
 
-
-def _verify_chain(logger: AuditLogger, total: int) -> None:
-    """Run full chain verification and display detailed results."""
-    console.print(
-        Text(
-            f"  Verifying hash chain integrity — {total} entries...",
-            style="dim",
-        )
-    )
-    console.print()
-
-    ok, errors = logger.verify_chain()
-
-    if ok:
-        console.print(
-            Panel(
-                f"[bold green]✔ CHAIN INTACT[/bold green]\n\n"
-                f"[white]{total} entries verified.[/white]\n"
-                f"[white]No tampering detected.[/white]\n"
-                f"[white]SHA-256 hash chain is unbroken.[/white]",
-                title="[bold]Audit Chain Verification[/bold]",
-                border_style="green",
-            )
-        )
-    else:
-        error_lines = "\n".join(f"  [red]• {e}[/red]" for e in errors)
-        console.print(
-            Panel(
-                f"[bold red]✘ CHAIN BROKEN — {len(errors)} error(s)[/bold red]\n\n"
-                f"{error_lines}\n\n"
-                "[bold red]The audit log has been modified.[/bold red]\n"
-                "[red]This is a critical security event.[/red]\n"
-                "[red]Preserve this log and escalate immediately.[/red]",
-                title="[bold red]⚠ AUDIT CHAIN VIOLATION[/bold red]",
-                border_style="red",
-            )
-        )
-
-    console.print()
-
-
-def _export_log(entries: list, export_path: Path) -> None:
-    """Export all audit log entries to a JSONL file."""
-    # Warn before overwriting an existing file
-    if export_path.exists():
-        console.print(
-            Text(
-                f"  ⚠ File already exists: {export_path}",
-                style="yellow",
-            )
-        )
-        try:
-            confirm = input("  Overwrite? (yes/no): ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            console.print(Text("  Export cancelled.", style="dim"))
-            return
-        if confirm != "yes":
-            console.print(Text("  Export cancelled.", style="dim"))
-            return
     try:
-        export_path.parent.mkdir(parents=True, exist_ok=True)
-        with export_path.open("w", encoding="utf-8") as fh:
-            for entry in entries:
-                record = {
-                    "log_id": entry.log_id,
-                    "timestamp": entry.timestamp,
-                    "record_type": entry.record_type,
-                    "record_id": entry.record_id,
-                    "prev_hash": entry.prev_hash,
-                    "current_hash": entry.current_hash,
-                    "payload": entry.payload,
-                }
-                fh.write(json.dumps(record) + "\n")
+        entries = engine._logger.get_all()
+    except Exception as exc:
+        raise click.ClickException(f"Failed to read audit log: {exc}") from exc
 
-        console.print(
-            Panel(
-                f"[bold green]✔ Exported {len(entries)} entries[/bold green]\n"
-                f"[white]File: {export_path}[/white]",
-                title="[bold]Export Complete[/bold]",
-                border_style="green",
-            )
+    filtered = [
+        entry
+        for entry in entries
+        if _matches_filters(
+            entry,
+            record_type=record_type,
+            agent_id=agent_id,
+            decision=decision,
+            contains=contains,
         )
+    ]
 
-    except OSError as exc:
-        console.print(
-            Panel(
-                f"[bold red]Export failed: {exc}[/bold red]",
-                title="[bold red]Export Error[/bold red]",
-                border_style="red",
+    display = filtered[-tail:]
+    redact = not no_redact
+
+    if json_mode:
+        output = {
+            "log_path": str(log_path),
+            "total_entries": len(entries),
+            "matched_entries": len(filtered),
+            "displayed_entries": len(display),
+            "entries": [_entry_to_json(entry, redact=redact) for entry in display],
+        }
+
+        if verify or fail_on_broken_chain:
+            ok, errors = engine.verify_audit_chain()
+            output["audit_chain"] = {
+                "intact": ok,
+                "error_count": len(errors),
+                "errors": [str(error) for error in errors[:20]],
+            }
+
+        click.echo(json.dumps(output, indent=2, sort_keys=True, ensure_ascii=False))
+
+    else:
+        click.echo(f"\n  AISec Audit Log — {log_path}")
+        click.echo(f"  Total entries:   {len(entries):>8,}")
+        click.echo(f"  Matched entries: {len(filtered):>8,}")
+
+        if verify or fail_on_broken_chain:
+            ok, errors = engine.verify_audit_chain()
+            if ok:
+                click.echo("  Chain status:    " + click.style("INTACT ✔", fg="green"))
+            else:
+                click.echo(
+                    "  Chain status:    "
+                    + click.style(f"BROKEN ✘ ({len(errors)} errors)", fg="red")
+                )
+                for error in errors[:5]:
+                    click.echo(f"    • {error}")
+
+        click.echo(f"\n  Showing last {len(display)} of {len(filtered)} entries:\n")
+        click.echo(f"  {'─' * 72}")
+
+        for entry in display:
+            _print_entry(entry, redact=redact)
+
+        click.echo(f"  {'─' * 72}\n")
+
+    if export_path:
+        try:
+            exporter = SIEMExporter(output_path=export_path)
+            written = exporter.export_audit_log(engine._logger)
+        except Exception as exc:
+            raise click.ClickException(f"CEF export failed: {exc}") from exc
+
+        if json_mode:
+            click.echo(
+                json.dumps(
+                    {
+                        "export_path": str(export_path),
+                        "cef_lines_written": written,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
             )
-        )
+        else:
+            click.echo(f"  Exported {written} CEF lines to {export_path}\n")
 
-    console.print()
+    if fail_on_broken_chain:
+        ok, errors = engine.verify_audit_chain()
+        if not ok:
+            raise click.ClickException(
+                f"Audit chain is broken: {len(errors)} error(s)."
+            )

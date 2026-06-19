@@ -1,487 +1,437 @@
 """
 AISec statistics dashboard CLI command.
 
-Displays a comprehensive security statistics overview
-from the audit log — decision distribution, risk trends,
-top agents, and audit chain integrity status.
+Displays a professional security statistics dashboard from the AISec
+tamper-evident audit log.
 
-Security considerations:
-    - Dashboard is strictly read-only.
-    - All data is read from the tamper-evident audit log.
-    - No statistics can be modified through this interface.
-    - If the audit chain is broken, a critical alert is shown.
-
-Usage:
+Run:
     aisec stats
-    aisec stats --log .aisec/audit.jsonl
-    aisec stats --tail 50
+    aisec stats --log-path ./audit.jsonl
+    aisec stats --json
+    aisec stats --top 10
 """
 
 from __future__ import annotations
 
+import json
+import statistics as stats
 from collections import Counter
 from pathlib import Path
+from typing import Any, Iterable
 
 import click
-from rich.columns import Columns
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
-from aisec.storage.audit import AuditLogger, DEFAULT_LOG_PATH
-from aisec.storage.models import Decision
+from aisec.storage.audit import DEFAULT_LOG_PATH
 
-console = Console()
+DECISION_BLOCKING = {"BLOCK", "ESCALATE"}
+DECISION_REVIEW = {"PENDING_REVIEW", "REVIEW", "HUMAN_REVIEW"}
+DECISION_ALLOW = {"ALLOW", "APPROVE", "APPROVED"}
 
 
-# ── Display helpers ───────────────────────────────────────────────────────────
+def _payload(entry: Any) -> dict[str, Any]:
+    """Safely return an audit entry payload."""
+    value = getattr(entry, "payload", {}) or {}
+    return value if isinstance(value, dict) else {}
 
 
-def _bar(value: int, total: int, width: int = 20) -> str:
-    """
-    Render a proportional bar chart segment.
-
-    Example: _bar(7, 10, 20) → '██████████████░░░░░░'
-    """
-    if total == 0:
-        return "░" * width
-    filled = int((value / total) * width)
-    empty = width - filled
-    return "█" * filled + "░" * empty
+def _record_type(entry: Any) -> str:
+    """Safely return an audit entry record type."""
+    return str(getattr(entry, "record_type", "") or "")
 
 
-def _risk_level(score: float) -> tuple[str, str]:
-    """Return (label, style) for a risk score."""
-    if score >= 0.80:
-        return "CRITICAL", "bold red"
-    if score >= 0.60:
-        return "HIGH", "bold yellow"
-    if score >= 0.30:
-        return "MEDIUM", "yellow"
-    return "LOW", "green"
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    """Convert a value to float without crashing the dashboard."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
-# ── Statistics computation ────────────────────────────────────────────────────
+def _decision(entry: Any) -> str:
+    """Normalize decision labels."""
+    return str(_payload(entry).get("decision", "UNKNOWN") or "UNKNOWN").upper()
 
 
-def _compute_stats(entries: list) -> dict:
-    """
-    Compute all statistics from a list of AuditLogEntry objects.
+def _percent(part: int, total: int) -> str:
+    """Format percentage safely."""
+    if total <= 0:
+        return "0.0%"
+    return f"{part / total * 100:.1f}%"
 
-    Returns a dictionary with all metrics needed by the display
-    functions. Separates analysis entries from analyst decisions.
-    """
-    analysis_entries = [e for e in entries if e.record_type == "analysis"]
-    analyst_entries = [e for e in entries if e.record_type == "analyst_decision"]
 
-    total = len(analysis_entries)
+def _counter_from_payload(
+    entries: Iterable[Any],
+    key: str,
+    *,
+    fallback: str = "unknown",
+) -> Counter[str]:
+    """Build a Counter from a payload key."""
+    counter: Counter[str] = Counter()
 
-    if total == 0:
-        return {"total": 0}
+    for entry in entries:
+        value = _payload(entry).get(key, fallback)
+        value = str(value or fallback)
+        counter[value] += 1
 
-    # Decision distribution
-    decision_counts: Counter[str] = Counter()
-    for entry in analysis_entries:
-        decision_counts[entry.payload.get("decision", "UNKNOWN")] += 1
+    return counter
 
-    # Risk score statistics
-    scores = [
-        entry.payload.get("risk_score", 0.0)
-        for entry in analysis_entries
-        if isinstance(entry.payload.get("risk_score"), (int, float))
-    ]
-    avg_risk = sum(scores) / len(scores) if scores else 0.0
-    max_risk = max(scores) if scores else 0.0
-    min_risk = min(scores) if scores else 0.0
 
-    # Risk distribution buckets
-    risk_buckets = {
-        "critical (≥0.80)": sum(1 for s in scores if s >= 0.80),
-        "high (0.60-0.80)": sum(1 for s in scores if 0.60 <= s < 0.80),
-        "medium (0.30-0.60)": sum(1 for s in scores if 0.30 <= s < 0.60),
-        "low (<0.30)": sum(1 for s in scores if s < 0.30),
+def _rule_counter(entries: Iterable[Any]) -> Counter[str]:
+    """Count rule hits across analysis entries."""
+    counter: Counter[str] = Counter()
+
+    for entry in entries:
+        rule_hits = _payload(entry).get("rule_hits", [])
+
+        if isinstance(rule_hits, str):
+            counter[rule_hits] += 1
+            continue
+
+        if isinstance(rule_hits, list):
+            for rule in rule_hits:
+                counter[str(rule)] += 1
+
+    return counter
+
+
+def _risk_scores(entries: Iterable[Any]) -> list[float]:
+    """Extract valid risk scores."""
+    scores: list[float] = []
+
+    for entry in entries:
+        raw_score = _payload(entry).get("risk_score", None)
+        if raw_score is None:
+            continue
+
+        score = _safe_float(raw_score, default=-1.0)
+        if 0.0 <= score <= 1.0:
+            scores.append(score)
+
+    return scores
+
+
+def _risk_bucket_counts(scores: list[float]) -> dict[str, int]:
+    """Group risk scores into useful demo buckets."""
+    buckets = {
+        "low_0_0_to_0_3": 0,
+        "medium_0_3_to_0_7": 0,
+        "high_0_7_to_0_9": 0,
+        "critical_0_9_to_1_0": 0,
     }
 
-    # Agent activity
-    agent_counts: Counter[str] = Counter()
-    for entry in analysis_entries:
-        agent = entry.payload.get("agent_id", "unknown")
-        agent_counts[agent] += 1
+    for score in scores:
+        if score < 0.3:
+            buckets["low_0_0_to_0_3"] += 1
+        elif score < 0.7:
+            buckets["medium_0_3_to_0_7"] += 1
+        elif score < 0.9:
+            buckets["high_0_7_to_0_9"] += 1
+        else:
+            buckets["critical_0_9_to_1_0"] += 1
 
-    # Top blocked actions
-    blocked_actions: Counter[str] = Counter()
-    for entry in analysis_entries:
-        if entry.payload.get("decision") in ("BLOCK", "ESCALATE"):
-            action = entry.payload.get("action_type", "unknown")
-            blocked_actions[action] += 1
+    return buckets
 
-    # Rule hits
-    rule_hits: Counter[str] = Counter()
-    for entry in analysis_entries:
-        for rule_id in entry.payload.get("rule_hits", []):
-            rule_hits[rule_id] += 1
 
-    # Analyst activity
-    analyst_counts: Counter[str] = Counter()
-    for entry in analyst_entries:
-        decision = entry.payload.get("analyst_decision", "unknown")
-        analyst_counts[decision] += 1
+def _top_items(counter: Counter[str], limit: int) -> list[tuple[str, int]]:
+    """Return top counter entries."""
+    return counter.most_common(max(1, limit))
 
-    # Scenario breakdown
-    scenario_counts: Counter[str] = Counter()
-    for entry in analysis_entries:
-        scenario = entry.payload.get("scenario", "unknown")
-        scenario_counts[scenario] += 1
+
+def _print_counter(title: str, counter: Counter[str], limit: int) -> None:
+    """Print a formatted top-N counter section."""
+    if not counter:
+        return
+
+    click.echo(f"\n  {'─' * 56}")
+    click.echo(f"  {title}")
+    click.echo(f"  {'─' * 56}")
+
+    for name, count in _top_items(counter, limit):
+        click.echo(f"  {name:<35} {count:>8,}")
+
+
+def _json_dashboard(
+    *,
+    total_entries: int,
+    total_analysis: int,
+    blocked: int,
+    reviewed: int,
+    allowed: int,
+    unknown: int,
+    scores: list[float],
+    temporal_count: int,
+    correlation_count: int,
+    safe_state_count: int,
+    analyst_count: int,
+    active_safe_states: int,
+    audit_ok: bool,
+    audit_errors: list[str],
+    top_rules: Counter[str],
+    top_agents: Counter[str],
+    top_actions: Counter[str],
+) -> dict[str, Any]:
+    """Build JSON dashboard payload."""
+    risk_stats: dict[str, Any] = {
+        "count": len(scores),
+        "buckets": _risk_bucket_counts(scores),
+    }
+
+    if scores:
+        risk_stats.update(
+            {
+                "mean": stats.mean(scores),
+                "median": stats.median(scores),
+                "min": min(scores),
+                "max": max(scores),
+                "stdev": stats.stdev(scores) if len(scores) > 1 else None,
+            }
+        )
 
     return {
-        "total": total,
-        "decision_counts": decision_counts,
-        "avg_risk": avg_risk,
-        "max_risk": max_risk,
-        "min_risk": min_risk,
-        "risk_buckets": risk_buckets,
-        "agent_counts": agent_counts,
-        "blocked_actions": blocked_actions,
-        "rule_hits": rule_hits,
-        "analyst_counts": analyst_counts,
-        "scenario_counts": scenario_counts,
-        "analyst_total": len(analyst_entries),
+        "audit": {
+            "total_entries": total_entries,
+            "chain_intact": audit_ok,
+            "errors": audit_errors,
+        },
+        "analysis": {
+            "total_events": total_analysis,
+            "blocked_or_escalated": blocked,
+            "pending_review": reviewed,
+            "allowed": allowed,
+            "unknown": unknown,
+            "block_rate_percent": (
+                (blocked / total_analysis * 100) if total_analysis else 0.0
+            ),
+        },
+        "risk_scores": risk_stats,
+        "alerts": {
+            "temporal_alerts": temporal_count,
+            "correlation_alerts": correlation_count,
+            "safe_state_activations": safe_state_count,
+            "analyst_decisions": analyst_count,
+            "active_safe_states": active_safe_states,
+        },
+        "top_rules": dict(top_rules),
+        "top_agents": dict(top_agents),
+        "top_actions": dict(top_actions),
     }
-
-
-# ── Panels ────────────────────────────────────────────────────────────────────
-
-
-def _decision_panel(stats: dict) -> Panel:
-    """Render the decision distribution panel."""
-    total = stats["total"]
-    counts = stats["decision_counts"]
-
-    lines = []
-    order = [
-        (Decision.BLOCK.value, "bold red"),
-        (Decision.ESCALATE.value, "bold magenta"),
-        (Decision.PENDING_REVIEW.value, "bold yellow"),
-        (Decision.ALLOW.value, "bold green"),
-    ]
-
-    for decision_val, style in order:
-        count = counts.get(decision_val, 0)
-        pct = (count / total * 100) if total > 0 else 0
-        bar = _bar(count, total, width=24)
-        lines.append(
-            f"[{style}]{decision_val:<16}[/{style}] "
-            f"[cyan]{bar}[/cyan] "
-            f"[white]{count:>4}[/white] "
-            f"[dim]({pct:5.1f}%)[/dim]"
-        )
-
-    content = "\n".join(lines)
-    content += f"\n\n[bold white]Total events:[/bold white] {total}"
-
-    return Panel(
-        content,
-        title="[bold]Decision Distribution[/bold]",
-        border_style="cyan",
-    )
-
-
-def _risk_panel(stats: dict) -> Panel:
-    """Render the risk score statistics panel."""
-    avg = stats["avg_risk"]
-    high = stats["max_risk"]
-    low = stats["min_risk"]
-    buckets = stats["risk_buckets"]
-    total = stats["total"]
-
-    avg_label, avg_style = _risk_level(avg)
-    max_label, max_style = _risk_level(high)
-
-    lines = [
-        f"[bold white]Average risk:[/]  [{avg_style}]{avg:.4f} ({avg_label})[/{avg_style}]",
-        f"[bold white]Highest risk:[/]  [{max_style}]{high:.4f} ({max_label})[/{max_style}]",
-        f"[bold white]Lowest risk:[/]   [green]{low:.4f}[/green]",
-        "",
-        "[bold white]Risk distribution:[/]",
-    ]
-
-    bucket_styles = {
-        "critical (≥0.80)": "bold red",
-        "high (0.60-0.80)": "bold yellow",
-        "medium (0.30-0.60)": "yellow",
-        "low (<0.30)": "green",
-    }
-
-    for label, count in buckets.items():
-        style = bucket_styles.get(label, "white")
-        bar = _bar(count, total, width=16)
-        lines.append(
-            f"  [{style}]{label:<22}[/{style}] "
-            f"[cyan]{bar}[/cyan] [white]{count}[/white]"
-        )
-
-    return Panel(
-        "\n".join(lines),
-        title="[bold]Risk Score Analysis[/bold]",
-        border_style="yellow",
-    )
-
-
-def _agent_panel(stats: dict) -> Panel:
-    """Render the agent activity panel."""
-    total = stats["total"]
-    agents = stats["agent_counts"].most_common(10)
-
-    if not agents:
-        return Panel("No agent data.", title="[bold]Agent Activity[/bold]")
-
-    lines = []
-    for agent, count in agents:
-        bar = _bar(count, total, width=20)
-        pct = (count / total * 100) if total > 0 else 0
-        lines.append(
-            f"[cyan]{agent:<22}[/cyan] "
-            f"[dim]{bar}[/dim] "
-            f"[white]{count:>4}[/white] [dim]({pct:.1f}%)[/dim]"
-        )
-
-    return Panel(
-        "\n".join(lines),
-        title="[bold]Agent Activity[/bold]",
-        border_style="cyan",
-    )
-
-
-def _rules_panel(stats: dict) -> Panel:
-    """Render the top fired rules panel."""
-    rules = stats["rule_hits"].most_common(10)
-
-    if not rules:
-        return Panel(
-            "[dim]No rules fired in this session.[/dim]",
-            title="[bold]Top Fired Rules[/bold]",
-            border_style="magenta",
-        )
-
-    total_hits = sum(stats["rule_hits"].values())
-    lines = []
-    for rule_id, count in rules:
-        bar = _bar(count, total_hits, width=16)
-        lines.append(
-            f"[magenta]{rule_id:<14}[/magenta] "
-            f"[dim]{bar}[/dim] "
-            f"[white]{count}[/white] hits"
-        )
-
-    return Panel(
-        "\n".join(lines),
-        title="[bold]Top Fired Rules[/bold]",
-        border_style="magenta",
-    )
-
-
-def _blocked_actions_panel(stats: dict) -> Panel:
-    """Render the most blocked action types panel."""
-    actions = stats["blocked_actions"].most_common(8)
-
-    if not actions:
-        return Panel(
-            "[green]No blocked actions recorded.[/green]",
-            title="[bold]Most Blocked Actions[/bold]",
-            border_style="red",
-        )
-
-    total = sum(stats["blocked_actions"].values())
-    lines = []
-    for action, count in actions:
-        bar = _bar(count, total, width=16)
-        lines.append(
-            f"[red]{action:<30}[/red] " f"[dim]{bar}[/dim] " f"[white]{count}[/white]"
-        )
-
-    return Panel(
-        "\n".join(lines),
-        title="[bold]Most Blocked Actions[/bold]",
-        border_style="red",
-    )
-
-
-def _scenario_panel(stats: dict) -> Panel:
-    """Render the scenario breakdown panel."""
-    total = stats["total"]
-    scenarios = stats["scenario_counts"]
-    analyst = stats["analyst_counts"]
-    analyst_t = stats["analyst_total"]
-
-    scenario_styles = {
-        "trading_ai": "bold cyan",
-        "urban_ai": "bold green",
-        "unknown": "dim",
-    }
-
-    lines = ["[bold white]Events by scenario:[/bold white]"]
-    for scenario, count in scenarios.most_common():
-        style = scenario_styles.get(scenario, "white")
-        bar = _bar(count, total, width=16)
-        lines.append(
-            f"  [{style}]{scenario:<16}[/{style}] "
-            f"[dim]{bar}[/dim] [white]{count}[/white]"
-        )
-
-    if analyst_t > 0:
-        lines.append("")
-        lines.append(f"[bold white]Analyst decisions:[/bold white] {analyst_t} total")
-        for decision, count in analyst.most_common():
-            lines.append(f"  [yellow]{decision:<12}[/yellow] {count}")
-
-    return Panel(
-        "\n".join(lines),
-        title="[bold]Scenario & Analyst Breakdown[/bold]",
-        border_style="green",
-    )
-
-
-def _integrity_panel(ok: bool, errors: list[str], count: int) -> Panel:
-    """Render the audit chain integrity status panel."""
-    if ok:
-        content = (
-            f"[bold green]✔ CHAIN INTACT[/bold green]\n"
-            f"[white]{count} entries verified — no tampering detected.[/white]"
-        )
-        border = "green"
-    else:
-        error_lines = "\n".join(f"  [red]• {e}[/red]" for e in errors[:5])
-        content = (
-            f"[bold red]✘ CHAIN BROKEN — {len(errors)} error(s)[/bold red]\n"
-            f"{error_lines}\n"
-            f"[bold red]Audit log may have been tampered with.[/bold red]"
-        )
-        border = "red"
-
-    return Panel(
-        content,
-        title="[bold]Audit Chain Integrity[/bold]",
-        border_style=border,
-    )
-
-
-# ── Click command ─────────────────────────────────────────────────────────────
 
 
 @click.command("stats")
 @click.option(
-    "--log",
-    type=click.Path(exists=False, path_type=Path),
+    "--log-path",
+    type=click.Path(path_type=Path),
     default=DEFAULT_LOG_PATH,
     show_default=True,
-    help="Path to the audit log file.",
+    help="Path to AISec audit log.",
 )
 @click.option(
-    "--tail",
-    type=click.IntRange(min=1, max=100_000),
-    default=None,
-    help="Analyse only the last N log entries.",
+    "--top",
+    "top_n",
+    type=int,
+    default=5,
+    show_default=True,
+    help="Number of top rules/agents/actions to show.",
 )
-def stats_command(log: Path, tail: int | None) -> None:
+@click.option(
+    "--json",
+    "json_mode",
+    is_flag=True,
+    help="Print machine-readable JSON output.",
+)
+@click.option(
+    "--fail-on-broken-chain",
+    is_flag=True,
+    help="Exit with non-zero code if audit chain verification fails.",
+)
+def stats_command(
+    log_path: Path,
+    top_n: int,
+    json_mode: bool,
+    fail_on_broken_chain: bool,
+) -> None:
     """
-    Display a security statistics dashboard from the audit log.
+    Display security statistics dashboard.
 
-    Reads the AISec audit log and renders a comprehensive overview
-    including decision distribution, risk analysis, agent activity,
-    rule hits, and audit chain integrity verification.
-
-    \\b
-    Examples:
-        aisec stats
-        aisec stats --tail 100
-        aisec stats --log .aisec/soc_session.jsonl
+    Shows decision distribution, risk score analysis, top rules,
+    top agents, temporal alerts, correlation alerts, safe-state
+    activity, analyst decisions, and audit-chain status.
     """
-    console.print()
+    from aisec.core.engine import AnalysisEngine
 
-    # Load the audit log
-    if not log.exists():
-        console.print(
-            Panel(
-                f"[yellow]Audit log not found at: {log}[/yellow]\n\n"
-                "[dim]Run 'aisec monitor' or 'aisec soc' first to generate data.[/dim]",
-                title="[bold]AISec Statistics[/bold]",
-                border_style="yellow",
-            )
+    engine = AnalysisEngine(log_path=log_path)
+
+    try:
+        entries = engine._logger.get_all()
+    except Exception as exc:
+        raise click.ClickException(f"Failed to read audit log: {exc}") from exc
+
+    analysis = [entry for entry in entries if _record_type(entry) == "analysis"]
+
+    temporal = [
+        entry
+        for entry in entries
+        if _record_type(entry) in {"temporal_alert", "temporal_anomaly"}
+    ]
+
+    correlation = [
+        entry
+        for entry in entries
+        if _record_type(entry) in {"correlation_alert", "multi_agent_correlation"}
+    ]
+
+    safe_state_entries = [
+        entry
+        for entry in entries
+        if _record_type(entry) in {"safe_state_entry", "safe_state_enter"}
+    ]
+
+    analyst_decisions = [
+        entry for entry in entries if _record_type(entry) == "analyst_decision"
+    ]
+
+    total = len(analysis)
+
+    decisions = [_decision(entry) for entry in analysis]
+    blocked = sum(1 for decision in decisions if decision in DECISION_BLOCKING)
+    reviewed = sum(1 for decision in decisions if decision in DECISION_REVIEW)
+    allowed = sum(1 for decision in decisions if decision in DECISION_ALLOW)
+    unknown = total - blocked - reviewed - allowed
+
+    scores = _risk_scores(analysis)
+
+    rule_counts = _rule_counter(analysis)
+    agent_counts = _counter_from_payload(analysis, "agent_id")
+    action_counts = _counter_from_payload(analysis, "action_type")
+
+    ok, errors = engine.verify_audit_chain()
+    error_texts = [str(error) for error in errors]
+
+    active_safe_states = engine.safe_state.active_count()
+    total_audit_entries = engine.audit_count()
+
+    if json_mode:
+        payload = _json_dashboard(
+            total_entries=total_audit_entries,
+            total_analysis=total,
+            blocked=blocked,
+            reviewed=reviewed,
+            allowed=allowed,
+            unknown=unknown,
+            scores=scores,
+            temporal_count=len(temporal),
+            correlation_count=len(correlation),
+            safe_state_count=len(safe_state_entries),
+            analyst_count=len(analyst_decisions),
+            active_safe_states=active_safe_states,
+            audit_ok=ok,
+            audit_errors=error_texts,
+            top_rules=rule_counts,
+            top_agents=agent_counts,
+            top_actions=action_counts,
         )
+        click.echo(json.dumps(payload, indent=2, sort_keys=True))
+        if fail_on_broken_chain and not ok:
+            raise click.ClickException("Audit chain is broken.")
         return
 
-    logger = AuditLogger(log_path=log)
-    entries = logger.get_all()
+    click.echo("\n" + "=" * 60)
+    click.echo("  AISec Security Statistics Dashboard")
+    click.echo("=" * 60)
 
-    if tail is not None:
-        entries = entries[-tail:]
+    click.echo(f"\n  Audit log: {log_path}")
 
-    ok, errors = logger.verify_chain()
-    count = len(entries)
+    if total == 0:
+        click.echo("\n  No events analysed yet.")
+        click.echo("  Run: aisec monitor --scenario trading_ai\n")
 
-    if count == 0:
-        console.print(
-            Panel(
-                "[yellow]Audit log is empty — no data to display.[/yellow]",
-                title="[bold]AISec Statistics[/bold]",
-                border_style="yellow",
-            )
+        ok, errors = engine.verify_audit_chain()
+        chain_str = (
+            click.style("INTACT", fg="green")
+            if ok
+            else click.style(f"BROKEN ({len(errors)} errors)", fg="red")
         )
+
+        click.echo(f"  Audit entries:     {total_audit_entries:>8,}")
+        click.echo(f"  Chain integrity:   {chain_str}")
+        click.echo("\n" + "=" * 60 + "\n")
+
+        if fail_on_broken_chain and not ok:
+            raise click.ClickException("Audit chain is broken.")
+
         return
 
-    stats = _compute_stats(entries)
-
-    # ── Render dashboard ──────────────────────────────────────────────────────
-
-    console.print(
-        Text(
-            f"  AISec Security Dashboard — {count} audit entries",
-            style="bold cyan",
-        )
+    click.echo(f"\n  {'─' * 56}")
+    click.echo("  Event Analysis Summary")
+    click.echo(f"  {'─' * 56}")
+    click.echo(f"  Total events analysed:     {total:>8,}")
+    click.echo(
+        f"  Blocked / Escalated:       {blocked:>8,}  ({_percent(blocked, total)})"
     )
-    console.print(Text(f"  Log: {log}", style="dim"))
-    console.print()
-
-    if stats["total"] == 0:
-        console.print(
-            Panel(
-                "[dim]No analysis events found in this log.[/dim]",
-                border_style="dim",
-            )
-        )
-        return
-
-    # Row 1: Decision distribution + Risk analysis
-    console.print(
-        Columns(
-            [
-                _decision_panel(stats),
-                _risk_panel(stats),
-            ]
-        )
+    click.echo(
+        f"  Pending review:            {reviewed:>8,}  ({_percent(reviewed, total)})"
+    )
+    click.echo(
+        f"  Allowed:                   {allowed:>8,}  ({_percent(allowed, total)})"
+    )
+    click.echo(
+        f"  Unknown decisions:         {unknown:>8,}  ({_percent(unknown, total)})"
     )
 
-    # Row 2: Agent activity + Scenario breakdown
-    console.print(
-        Columns(
-            [
-                _agent_panel(stats),
-                _scenario_panel(stats),
-            ]
-        )
+    if scores:
+        click.echo(f"\n  {'─' * 56}")
+        click.echo("  Risk Score Distribution")
+        click.echo(f"  {'─' * 56}")
+        click.echo(f"  Count:  {len(scores):>8,}")
+        click.echo(f"  Mean:   {stats.mean(scores):.4f}")
+        click.echo(f"  Median: {stats.median(scores):.4f}")
+        if len(scores) > 1:
+            click.echo(f"  Stdev:  {stats.stdev(scores):.4f}")
+        else:
+            click.echo("  Stdev:  N/A")
+        click.echo(f"  Min:    {min(scores):.4f}")
+        click.echo(f"  Max:    {max(scores):.4f}")
+
+        buckets = _risk_bucket_counts(scores)
+        click.echo("\n  Risk buckets:")
+        click.echo(f"    Low       0.0–0.3:   {buckets['low_0_0_to_0_3']:>8,}")
+        click.echo(f"    Medium    0.3–0.7:   {buckets['medium_0_3_to_0_7']:>8,}")
+        click.echo(f"    High      0.7–0.9:   {buckets['high_0_7_to_0_9']:>8,}")
+        click.echo(f"    Critical  0.9–1.0:   {buckets['critical_0_9_to_1_0']:>8,}")
+
+    _print_counter("Top Rules Fired", rule_counts, top_n)
+    _print_counter("Top Agents", agent_counts, top_n)
+    _print_counter("Top Action Types", action_counts, top_n)
+
+    click.echo(f"\n  {'─' * 56}")
+    click.echo("  Security Alerts")
+    click.echo(f"  {'─' * 56}")
+    click.echo(f"  Temporal alerts:           {len(temporal):>8,}")
+    click.echo(f"  Correlation alerts:        {len(correlation):>8,}")
+    click.echo(f"  Safe state activations:    {len(safe_state_entries):>8,}")
+    click.echo(f"  Analyst decisions:         {len(analyst_decisions):>8,}")
+    click.echo(f"  Active safe states:        {active_safe_states:>8,}")
+
+    chain_str = (
+        click.style("INTACT", fg="green")
+        if ok
+        else click.style(f"BROKEN ({len(errors)} errors)", fg="red")
     )
 
-    # Row 3: Blocked actions + Top rules
-    console.print(
-        Columns(
-            [
-                _blocked_actions_panel(stats),
-                _rules_panel(stats),
-            ]
-        )
-    )
+    click.echo(f"\n  {'─' * 56}")
+    click.echo("  Audit Chain Status")
+    click.echo(f"  {'─' * 56}")
+    click.echo(f"  Total audit entries:       {total_audit_entries:>8,}")
+    click.echo(f"  Chain integrity:           {chain_str}")
 
-    # Row 4: Audit chain integrity — full width
-    console.print(_integrity_panel(ok, errors, count))
-    console.print()
+    if not ok:
+        click.echo("\n  Audit chain errors:")
+        for error in error_texts[:5]:
+            click.echo(f"  - {error}")
+        if len(error_texts) > 5:
+            click.echo(f"  ... and {len(error_texts) - 5} more error(s).")
+
+    click.echo("\n" + "=" * 60 + "\n")
+
+    if fail_on_broken_chain and not ok:
+        raise click.ClickException("Audit chain is broken.")
