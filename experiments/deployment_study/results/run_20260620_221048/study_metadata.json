@@ -1,0 +1,23 @@
+{
+  "aisec_version": "1.0.0",
+  "benchmark_label": "AISec-AgentRiskBench v0.2",
+  "git_commit": "cce2e7c",
+  "project_root": "C:\\Users\\Muhammad Muttaka\\Documents\\aisec",
+  "seed": 42,
+  "selected_baselines": [
+    "baseline_none",
+    "baseline_static_rules",
+    "baseline_prompt_only",
+    "aisec_full"
+  ],
+  "selected_groups": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "started_at": "2026-06-20T22:10:48.896204+00:00",
+  "study_framework_version": "1.6.0",
+  "study_run_id": "aisec-study-20260620-221048-8993639d",
+  "tasks_file": "experiments\\deployment_study\\tasks.yaml"
+}
