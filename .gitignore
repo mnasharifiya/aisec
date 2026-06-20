@@ -20,3 +20,6 @@ build/
 *.db
 *.jsonl
 .aisec/
+
+# AISec deployment study generated outputs
+experiments/deployment_study/results/run_*/
