@@ -467,7 +467,7 @@ AISEC_THRESHOLDS_WATCH
 
 AISec implements the five-layer control framework:
 
-Muhammad Muttaka (2025). A Layered Cybersecurity Framework for Enforcing Human Control over Advanced Autonomous Systems. School of Cybersecurity, Astana IT University, Kazakhstan. Under academic review.
+Layered Cybersecurity Framework for Enforcing Human Control over AAutonomous AI. School of Cybersecurity, Astana IT University, Kazakhstan. Under review.
 
 Three formally enforceable rules:
 
