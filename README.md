@@ -90,16 +90,16 @@ AI Agent Action
 ## Installation
 
 ```bash
-pip install aisec
+pip install aisec-runtime
 ```
 
 With framework adapters:
 
 ```bash
-pip install aisec[langchain]
-pip install aisec[autogen]
-pip install aisec[openai]
-pip install aisec[all]
+pip install aisec-runtime[langchain]
+pip install aisec-runtime[autogen]
+pip install aisec-runtime[openai]
+pip install aisec-runtime[all]
 ```
 
 From source:
