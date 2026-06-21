@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aisec"
-version = "1.2.0"
+version = "1.6.0"
 description = "Runtime Security Monitoring for Autonomous AI Agents"
 authors = [
     {name = "Muhammad Muttaka", email = "255902@astanait.edu.kz"}
