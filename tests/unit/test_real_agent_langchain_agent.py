@@ -111,7 +111,9 @@ def test_tool_collector_config_defaults() -> None:
     assert config.framework == DEFAULT_FRAMEWORK
 
 
-def test_tool_collector_config_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tool_collector_config_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("GROQ_MODEL", "llama-3.3-70b-versatile")
     monkeypatch.setenv("GROQ_TEMPERATURE", "0.0")
     monkeypatch.setenv("GROQ_MAX_RETRIES", "3")

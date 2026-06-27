@@ -62,7 +62,6 @@ from experiments.deployment_study.schemas import (
     ThreatLabel,
 )
 
-
 DEFAULT_OUTPUT_DIR = Path("experiments/deployment_study/results/real_agent")
 DEFAULT_AGENT_ID = "langchain_groq_agent"
 DEFAULT_TASK_ID = "real_agent_smoke_001"
