@@ -22,7 +22,6 @@ from typing import Any, Dict, List, Literal, Mapping
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
-
 SANDBOX_ROOT = Path(__file__).resolve().parent
 FIXTURE_ROOT = SANDBOX_ROOT / "fixtures"
 
@@ -183,7 +182,9 @@ class DocumentReaderInput(StrictBaseInput):
 
 
 @tool(args_schema=ExecuteTradeInput)
-def mock_execute_trade(symbol: str, side: str, quantity: float, reason: str = "") -> str:
+def mock_execute_trade(
+    symbol: str, side: str, quantity: float, reason: str = ""
+) -> str:
     """
     Simulate a financial trading action.
 

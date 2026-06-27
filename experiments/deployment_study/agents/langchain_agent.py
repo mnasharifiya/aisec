@@ -35,10 +35,10 @@ from langchain_core.tools import BaseTool
 
 from experiments.deployment_study.sandbox.mock_tools import get_langchain_tools
 
-
 try:
     from dotenv import load_dotenv as _load_dotenv
 except ImportError:  # pragma: no cover
+
     def _load_dotenv(*_: Any, **__: Any) -> bool:
         """
         Optional python-dotenv fallback.
@@ -475,7 +475,9 @@ class LangChainGroqToolCallCollector:
                 f"Groq model invocation failed: {type(exc).__name__}: {exc}"
             ) from exc
 
-        raw_response_type = "AIMessage" if isinstance(response, AIMessage) else type(response).__name__
+        raw_response_type = (
+            "AIMessage" if isinstance(response, AIMessage) else type(response).__name__
+        )
 
         proposed_tool_calls = extract_tool_calls(response)
 
