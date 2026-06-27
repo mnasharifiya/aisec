@@ -22,7 +22,6 @@ from experiments.deployment_study.agents.langchain_agent import (
     DEFAULT_PROTOCOL_VERSION,
     DEFAULT_PROVIDER,
     ProposedToolCall,
-    RealAgentConfigurationError,
     RealAgentProposalResult,
     ToolCallCollectorConfig,
     build_default_system_prompt,
@@ -267,11 +266,19 @@ def test_real_agent_proposal_result_public_record_and_json() -> None:
 def test_collector_missing_api_key_raises_clean_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from experiments.deployment_study.agents.langchain_agent import (
-        LangChainGroqToolCallCollector,
-    )
+    import experiments.deployment_study.agents.langchain_agent as langchain_agent
 
+    # Q1/CI-standard isolation:
+    # This test must verify behavior when GROQ_API_KEY is truly unavailable.
+    # A developer's local .env file must not affect this test.
+    monkeypatch.setattr(langchain_agent, "load_optional_env", lambda: None)
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_MODEL", raising=False)
 
-    with pytest.raises(RealAgentConfigurationError, match="GROQ_API_KEY"):
-        LangChainGroqToolCallCollector(config=ToolCallCollectorConfig())
+    with pytest.raises(
+        langchain_agent.RealAgentConfigurationError,
+        match="GROQ_API_KEY",
+    ):
+        langchain_agent.LangChainGroqToolCallCollector(
+            config=langchain_agent.ToolCallCollectorConfig()
+        )

@@ -9,8 +9,9 @@ Research-critical execution order:
     1. LLM proposes sandbox tool calls.
     2. Proposed tool calls are normalized into AISec security actions.
     3. AISec analyses each attempted action before execution.
-    4. StudyEvent records are produced for reproducible evaluation.
-    5. Sandbox mock tools execute only if AISec allows the action.
+    4. Prompt-injection policy is applied to the enforcement decision.
+    5. StudyEvent records are produced for reproducible evaluation.
+    6. Sandbox mock tools execute only if AISec and the injection policy allow.
 
 No real-world tools are executed. All tools are sandbox mock tools.
 """
@@ -25,6 +26,7 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
+from enum import Enum
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping
@@ -69,6 +71,27 @@ DEFAULT_AISEC_VERSION = "1.6.0"
 DEFAULT_FRAMEWORK_VERSION = "langchain-core"
 
 
+class InjectionPolicy(str, Enum):
+    """
+    Policy for how prompt-injection detections affect enforcement.
+
+    record_only:
+        Record injection_detected=True but do not change the AISec decision.
+
+    review:
+        Convert detected prompt injection into PENDING_REVIEW unless AISec
+        already produced BLOCK or ESCALATE.
+
+    block:
+        Convert detected prompt injection into BLOCK unless AISec already
+        produced ESCALATE.
+    """
+
+    RECORD_ONLY = "record_only"
+    REVIEW = "review"
+    BLOCK = "block"
+
+
 @dataclass(frozen=True)
 class NormalizedAction:
     """AISec-normalized representation of a proposed tool call."""
@@ -88,9 +111,12 @@ class AnalysedToolCall:
     normalized_action: NormalizedAction
     aisec_event: Event
     engine_result: EngineResult
+    base_decision: StudyDecision
+    final_decision: StudyDecision
     study_event: StudyEvent
     injection_detected: bool
     injection_confidence: float | None
+    injection_policy: InjectionPolicy
     sandbox_executed: bool
     sandbox_result_summary: str | None
 
@@ -475,6 +501,76 @@ def map_model_provider(provider: str) -> ModelProvider:
         return ModelProvider.SIMULATED
 
 
+def normalize_injection_policy(policy: InjectionPolicy | str) -> InjectionPolicy:
+    """Normalize injection policy from enum or string."""
+    if isinstance(policy, InjectionPolicy):
+        return policy
+    return InjectionPolicy(policy)
+
+
+def apply_injection_policy(
+    *,
+    base_decision: StudyDecision,
+    injection_detected: bool,
+    policy: InjectionPolicy | str,
+) -> StudyDecision:
+    """
+    Apply prompt-injection policy to a base AISec decision.
+
+    This does not modify the underlying EngineResult. It produces the final
+    StudyEvent decision used for evaluation and execution gating.
+    """
+    normalized_policy = normalize_injection_policy(policy)
+
+    if not injection_detected:
+        return base_decision
+
+    if normalized_policy == InjectionPolicy.RECORD_ONLY:
+        return base_decision
+
+    if normalized_policy == InjectionPolicy.REVIEW:
+        if base_decision == StudyDecision.ALLOW:
+            return StudyDecision.PENDING_REVIEW
+        return base_decision
+
+    if normalized_policy == InjectionPolicy.BLOCK:
+        if base_decision == StudyDecision.ESCALATE:
+            return base_decision
+        if base_decision in {
+            StudyDecision.ALLOW,
+            StudyDecision.PENDING_REVIEW,
+        }:
+            return StudyDecision.BLOCK
+        return base_decision
+
+    return base_decision
+
+
+def injection_policy_rule_hit(
+    *,
+    base_decision: StudyDecision,
+    final_decision: StudyDecision,
+    injection_detected: bool,
+    policy: InjectionPolicy | str,
+) -> str | None:
+    """Return a synthetic policy rule hit when injection policy changes decision."""
+    normalized_policy = normalize_injection_policy(policy)
+
+    if not injection_detected:
+        return None
+
+    if base_decision == final_decision:
+        return None
+
+    if normalized_policy == InjectionPolicy.REVIEW:
+        return "PROMPT-INJECTION-POLICY-REVIEW"
+
+    if normalized_policy == InjectionPolicy.BLOCK:
+        return "PROMPT-INJECTION-POLICY-BLOCK"
+
+    return None
+
+
 def analyse_prompt_injection(
     *,
     detector: PromptInjectionDetector,
@@ -498,6 +594,9 @@ def analyse_prompt_injection(
     except (TypeError, ValueError):
         confidence_value = None
 
+    if confidence_value is not None:
+        confidence_value = max(0.0, min(1.0, confidence_value))
+
     return detected, confidence_value
 
 
@@ -516,12 +615,28 @@ def make_study_event(
     latency_ms: float,
     injection_detected: bool,
     injection_confidence: float | None,
+    injection_policy: InjectionPolicy | str,
     git_commit: str,
     aisec_version: str,
     framework_version: str,
 ) -> StudyEvent:
     """Convert AISec EngineResult into deployment-study StudyEvent."""
-    decision = map_decision(result.decision)
+    base_decision = map_decision(result.decision)
+    decision = apply_injection_policy(
+        base_decision=base_decision,
+        injection_detected=injection_detected,
+        policy=injection_policy,
+    )
+
+    rule_hits = list(result.analysis.rule_hits)
+    policy_hit = injection_policy_rule_hit(
+        base_decision=base_decision,
+        final_decision=decision,
+        injection_detected=injection_detected,
+        policy=injection_policy,
+    )
+    if policy_hit is not None and policy_hit not in rule_hits:
+        rule_hits.append(policy_hit)
 
     was_blocked = decision in {StudyDecision.BLOCK, StudyDecision.ESCALATE}
     was_reviewed = decision == StudyDecision.PENDING_REVIEW
@@ -551,7 +666,7 @@ def make_study_event(
         ),
         decision=decision,
         risk_score=result.risk_score,
-        rule_hits=list(result.analysis.rule_hits),
+        rule_hits=rule_hits,
         was_blocked=was_blocked,
         was_intercepted=was_intercepted,
         was_reviewed=was_reviewed,
@@ -569,8 +684,21 @@ def make_study_event(
     )
 
 
-def should_execute_sandbox_tool(result: EngineResult) -> bool:
-    """Return True only when AISec allows the action."""
+def should_execute_sandbox_tool(
+    result: EngineResult,
+    *,
+    injection_detected: bool = False,
+    injection_policy: InjectionPolicy | str = InjectionPolicy.REVIEW,
+) -> bool:
+    """Return True only when AISec and injection policy allow execution."""
+    normalized_policy = normalize_injection_policy(injection_policy)
+
+    if injection_detected and normalized_policy in {
+        InjectionPolicy.REVIEW,
+        InjectionPolicy.BLOCK,
+    }:
+        return False
+
     return result.decision == Decision.ALLOW and not result.safe_state_block
 
 
@@ -587,11 +715,14 @@ def analyse_one_tool_call(
     threat_label: ThreatLabel,
     agent_id: str,
     execute_allowed_tools: bool,
+    injection_policy: InjectionPolicy | str,
     git_commit: str,
     aisec_version: str,
     framework_version: str,
 ) -> AnalysedToolCall:
     """Analyse one proposed tool call and optionally execute it if allowed."""
+    injection_policy = normalize_injection_policy(injection_policy)
+
     normalized = normalize_proposed_tool_call(
         proposed_call=proposed_call,
         prompt=prompt,
@@ -619,6 +750,13 @@ def analyse_one_tool_call(
     result = engine.analyse(aisec_event)
     latency_ms = (time.perf_counter() - started) * 1000.0
 
+    base_decision = map_decision(result.decision)
+    final_decision = apply_injection_policy(
+        base_decision=base_decision,
+        injection_detected=injection_detected,
+        policy=injection_policy,
+    )
+
     study_event = make_study_event(
         aisec_event=aisec_event,
         result=result,
@@ -633,6 +771,7 @@ def analyse_one_tool_call(
         latency_ms=latency_ms,
         injection_detected=injection_detected,
         injection_confidence=injection_confidence,
+        injection_policy=injection_policy,
         git_commit=git_commit,
         aisec_version=aisec_version,
         framework_version=framework_version,
@@ -641,7 +780,11 @@ def analyse_one_tool_call(
     sandbox_executed = False
     sandbox_result_summary: str | None = None
 
-    if execute_allowed_tools and should_execute_sandbox_tool(result):
+    if execute_allowed_tools and should_execute_sandbox_tool(
+        result,
+        injection_detected=injection_detected,
+        injection_policy=injection_policy,
+    ):
         sandbox_result = execute_mock_tool(proposed_call.name, proposed_call.args)
         sandbox_executed = True
         sandbox_result_summary = _short_json(json.loads(sandbox_result))
@@ -651,9 +794,12 @@ def analyse_one_tool_call(
         normalized_action=normalized,
         aisec_event=aisec_event,
         engine_result=result,
+        base_decision=base_decision,
+        final_decision=final_decision,
         study_event=study_event,
         injection_detected=injection_detected,
         injection_confidence=injection_confidence,
+        injection_policy=injection_policy,
         sandbox_executed=sandbox_executed,
         sandbox_result_summary=sandbox_result_summary,
     )
@@ -734,6 +880,13 @@ def build_records(
                     "sandbox_executed": analysed.sandbox_executed,
                     "sandbox_result_summary": analysed.sandbox_result_summary,
                 },
+                "enforcement": {
+                    "base_decision": analysed.base_decision.value,
+                    "final_decision": analysed.final_decision.value,
+                    "injection_policy": analysed.injection_policy.value,
+                    "injection_detected": analysed.injection_detected,
+                    "injection_confidence": analysed.injection_confidence,
+                },
                 "normalized_action": {
                     "action_type": analysed.normalized_action.action_type,
                     "target": analysed.normalized_action.target,
@@ -761,8 +914,11 @@ def run_once(
     agent_id: str,
     output_dir: Path,
     execute_allowed_tools: bool,
+    injection_policy: InjectionPolicy | str = InjectionPolicy.REVIEW,
 ) -> Path:
     """Run one real-agent proposal and AISec analysis pass."""
+    injection_policy = normalize_injection_policy(injection_policy)
+
     task_run_id = str(uuid.uuid4())
     git_commit = get_git_commit()
     aisec_version = get_aisec_version()
@@ -806,6 +962,7 @@ def run_once(
             threat_label=threat_label,
             agent_id=agent_id,
             execute_allowed_tools=execute_allowed_tools,
+            injection_policy=injection_policy,
             git_commit=git_commit,
             aisec_version=aisec_version,
             framework_version=framework_version,
@@ -822,13 +979,17 @@ def run_once(
     print(f"task_id: {task_id}")
     print(f"proposed_tool_calls: {proposal.proposed_tool_call_count}")
     print(f"study_events: {len(analysed_calls)}")
+    print(f"injection_policy: {injection_policy.value}")
 
     for analysed in analysed_calls:
         event = analysed.study_event
         print(
             f"- {analysed.proposed_call.name} -> {event.action_type} | "
-            f"decision={event.decision.value} risk={event.risk_score} "
-            f"rules={event.rule_hits} executed={analysed.sandbox_executed}"
+            f"base_decision={analysed.base_decision.value} "
+            f"final_decision={event.decision.value} "
+            f"risk={event.risk_score} rules={event.rule_hits} "
+            f"injection={event.injection_detected} "
+            f"executed={analysed.sandbox_executed}"
         )
 
     print(f"output: {output_path}")
@@ -880,6 +1041,15 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not execute sandbox tools even if AISec allows them.",
     )
+    parser.add_argument(
+        "--injection-policy",
+        default=InjectionPolicy.REVIEW.value,
+        choices=[item.value for item in InjectionPolicy],
+        help=(
+            "How detected prompt injection affects enforcement: "
+            "record_only, review, or block. Default: review."
+        ),
+    )
 
     return parser.parse_args()
 
@@ -912,6 +1082,7 @@ def main() -> None:
         agent_id=args.agent_id,
         output_dir=Path(args.output_dir),
         execute_allowed_tools=not args.no_execute,
+        injection_policy=InjectionPolicy(args.injection_policy),
     )
 
 
