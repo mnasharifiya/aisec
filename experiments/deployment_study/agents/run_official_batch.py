@@ -47,6 +47,11 @@ from experiments.deployment_study.agents.validate_real_agent_tasks import (  # n
     validate_file,
 )
 from experiments.deployment_study.agents.run_real_agent import run_once  # noqa: E402
+from experiments.deployment_study.schemas import (  # noqa: E402
+    ExperimentGroup,
+    GroundTruth,
+    ThreatLabel,
+)
 
 
 DEFAULT_OUTPUT_ROOT = (
@@ -147,6 +152,72 @@ def write_json(path: Path, payload: Mapping[str, Any]) -> None:
         json.dumps(ensure_json_serializable(payload), indent=2, sort_keys=False) + "\n",
         encoding="utf-8",
     )
+
+
+def expand_runner_return(value: Any) -> Any:
+    """
+    Expand run_once return values into JSON-safe records.
+
+    The current real-agent runner returns a Path to a JSONL file. For later
+    analysis, the batch summary should preserve both the path and the records.
+    """
+    if not isinstance(value, Path):
+        return value
+
+    payload: dict[str, Any] = {
+        "result_path": str(value),
+        "result_file_exists": value.exists(),
+        "records": [],
+        "record_count": 0,
+    }
+
+    if not value.exists() or not value.is_file():
+        return payload
+
+    if value.suffix.lower() == ".jsonl":
+        records: list[dict[str, Any]] = []
+        with value.open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                try:
+                    parsed = json.loads(stripped)
+                except json.JSONDecodeError as exc:
+                    records.append(
+                        {
+                            "record_parse_error": True,
+                            "line_number": line_number,
+                            "error": exc.msg,
+                            "raw_line": stripped,
+                        }
+                    )
+                    continue
+
+                if isinstance(parsed, dict):
+                    records.append(parsed)
+                else:
+                    records.append({"non_object_record": parsed})
+
+        payload["records"] = records
+        payload["record_count"] = len(records)
+        return payload
+
+    if value.suffix.lower() == ".json":
+        try:
+            parsed = json.loads(value.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            payload["json_parse_error"] = exc.msg
+            return payload
+
+        payload["records"] = parsed if isinstance(parsed, list) else [parsed]
+        payload["record_count"] = len(payload["records"])
+        return payload
+
+    payload["text_preview"] = value.read_text(
+        encoding="utf-8", errors="replace"
+    )[:2000]
+    return payload
 
 
 # =============================================================================
@@ -418,21 +489,25 @@ def _runner_kwargs_for_task(
 
     return {
         "prompt": task["prompt"],
+        "dry_run": False,
+        "study_run_id": config.study_run_id,
         "task_id": task["task_id"],
         "task_group": task["task_group"],
-        "ground_truth": task["ground_truth"],
-        "threat_label": task["threat_label"],
+        "repetition_id": planned.repetition_id,
+        "group": ExperimentGroup(str(task["task_group"])),
+        "ground_truth": GroundTruth(str(task["ground_truth"])),
+        "threat_label": ThreatLabel(str(task["threat_label"])),
+        "agent_id": (
+            f"{config.study_run_id}:{planned.task_id}:r{planned.repetition_id}"
+        ),
+        "output_dir": output_dir,
         "execute_allowed_tools": execute_allowed,
         "execute_tools": execute_allowed,
         "no_execute": not execute_allowed,
         "injection_policy": task.get("injection_policy", config.injection_policy),
         "model_provider": config.model_provider,
         "model_name": config.model_name,
-        "output_dir": output_dir,
-        "repetition_id": planned.repetition_id,
-        "study_run_id": config.study_run_id,
         "live": True,
-        "dry_run": False,
     }
 
 
@@ -514,6 +589,7 @@ def run_planned_task(
             config=config,
             output_dir=output_dir,
         )
+        runner_return = expand_runner_return(runner_return)
     except Exception as exc:
         finished_at = utc_now_iso()
         duration_ms = (time.perf_counter() - start) * 1000.0

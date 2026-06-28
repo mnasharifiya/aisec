@@ -230,3 +230,50 @@ def test_summary_json_contains_reproducibility_metadata(tmp_path: Path) -> None:
     assert data["manifest"]["sha256"]
     assert "git_commit" in data["reproducibility"]
     assert "git_status_short" in data["reproducibility"]
+
+def test_path_runner_return_jsonl_records_are_embedded(tmp_path: Path) -> None:
+    result_path = tmp_path / "runner_result.jsonl"
+
+    def path_runner(**kwargs: Any) -> Path:
+        event = {
+            "record_type": "real_agent_study_event",
+            "study_event": {
+                "event_id": "event-1",
+                "task_id": kwargs["task_id"],
+                "group": kwargs["task_group"],
+                "ground_truth": "safe",
+                "threat_label": "safe",
+                "decision": "ALLOW",
+                "latency_ms": 1.0,
+                "injection_detected": False,
+                "correlation_alerts": 0,
+                "temporal_alerts": 0,
+                "safe_state_active": False,
+            },
+        }
+        result_path.write_text(json.dumps(event) + "\n", encoding="utf-8")
+        return result_path
+
+    config = BatchRunConfig(
+        manifest_path=MANIFEST_PATH,
+        output_root=tmp_path,
+        repetitions=1,
+        model_provider="groq",
+        model_name="llama-3.3-70b-versatile",
+        injection_policy="review",
+        study_run_id="unit-test-study",
+        live=True,
+        allow_candidate_manifest=True,
+        no_execute_all=True,
+        limit=1,
+    )
+
+    summary = run_batch(config=config, runner=path_runner)
+
+    assert summary.completed_run_count == 1
+    assert summary.failed_run_count == 0
+
+    runner_return = summary.results[0].runner_return
+    assert runner_return["result_file_exists"] is True
+    assert runner_return["record_count"] == 1
+    assert runner_return["records"][0]["study_event"]["decision"] == "ALLOW"
