@@ -1,0 +1,11 @@
+# Local/generated real-agent outputs.
+# Do not commit development smoke outputs or ad-hoc live results.
+# Official frozen evaluation artifacts must be stored and committed explicitly
+# under a separately documented frozen-results directory.
+
+*.jsonl
+*_summary.json
+audit.jsonl
+*.tmp
+
+!.gitignore
