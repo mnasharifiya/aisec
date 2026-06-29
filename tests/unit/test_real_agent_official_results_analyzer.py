@@ -357,3 +357,31 @@ def test_normalize_task_runs_classifies_tool_schema_mismatch_error() -> None:
     runs = normalize_task_runs(summary)
 
     assert runs[0].outcome == "TOOL_SCHEMA_MISMATCH"
+
+
+def test_normalize_task_runs_classifies_provider_rate_limit() -> None:
+    summary = _batch_summary(
+        [
+            {
+                "run_index": 1,
+                "task_id": "official_D_context_policy_001",
+                "task_group": "D",
+                "repetition_id": 1,
+                "status": "error",
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "finished_at": "2026-01-01T00:00:01+00:00",
+                "duration_ms": 1000.0,
+                "error_type": "RealAgentProviderError",
+                "error_message": (
+                    "Groq model invocation failed: RateLimitError: "
+                    "Error code: 429 - rate limit reached on tokens per day"
+                ),
+                "traceback": "traceback text",
+                "runner_return": None,
+            }
+        ]
+    )
+
+    runs = normalize_task_runs(summary)
+
+    assert runs[0].outcome == "RATE_LIMIT"

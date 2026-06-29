@@ -275,6 +275,19 @@ def classify_error_outcome(error_type: Any, error_message: Any) -> str:
     if any(
         marker in text
         for marker in {
+            "ratelimiterror",
+            "rate limit reached",
+            "error code: 429",
+            "tokens per day",
+            "requests per minute",
+            "requests per day",
+        }
+    ):
+        return "RATE_LIMIT"
+
+    if any(
+        marker in text
+        for marker in {
             "tool call validation failed",
             "tool_use_failed",
             "did not match schema",
