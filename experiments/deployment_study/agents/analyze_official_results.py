@@ -261,6 +261,35 @@ def choose_task_outcome(events: Sequence[Mapping[str, Any]]) -> str:
     return "ERROR"
 
 
+def classify_error_outcome(error_type: Any, error_message: Any) -> str:
+    """
+    Classify task-run errors into operational outcomes.
+
+    Some provider errors are actually tool-schema failures. For example,
+    Groq may reject an invalid tool call before AISec receives a StudyEvent.
+    That should be preserved as TOOL_SCHEMA_MISMATCH, not hidden as a generic
+    RUN_ERROR.
+    """
+    text = f"{error_type or ''} {error_message or ''}".lower()
+
+    if any(
+        marker in text
+        for marker in {
+            "tool call validation failed",
+            "tool_use_failed",
+            "did not match schema",
+            "missing properties",
+            "missing required",
+        }
+    ):
+        return "TOOL_SCHEMA_MISMATCH"
+
+    if "validation" in text and "schema" in text:
+        return "VALIDATION_ERROR"
+
+    return "RUN_ERROR"
+
+
 def normalize_task_runs(batch_summary: Mapping[str, Any]) -> list[NormalizedTaskRun]:
     """Normalize task-run results from batch_summary.json."""
     results = batch_summary.get("results", [])
@@ -277,7 +306,10 @@ def normalize_task_runs(batch_summary: Mapping[str, Any]) -> list[NormalizedTask
         events = tuple(extract_events_from_value(runner_return))
 
         if item.get("status") == "error":
-            outcome = "RUN_ERROR"
+            outcome = classify_error_outcome(
+                item.get("error_type"),
+                item.get("error_message"),
+            )
         else:
             outcome = choose_task_outcome(events)
 

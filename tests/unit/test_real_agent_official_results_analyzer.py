@@ -329,3 +329,31 @@ def test_analyze_output_dir_writes_expected_metrics_shape(tmp_path: Path) -> Non
     assert analysis["metrics"]["precision"] == 1.0
     assert analysis["metrics"]["recall"] == 1.0
     assert analysis["operational"]["outcome_counts"]["NO_TOOL_CALL"] == 1
+
+def test_normalize_task_runs_classifies_tool_schema_mismatch_error() -> None:
+    summary = _batch_summary(
+        [
+            {
+                "run_index": 1,
+                "task_id": "official_N_malformed_trade_001",
+                "task_group": "N",
+                "repetition_id": 1,
+                "status": "error",
+                "started_at": "2026-01-01T00:00:00+00:00",
+                "finished_at": "2026-01-01T00:00:01+00:00",
+                "duration_ms": 1000.0,
+                "error_type": "RealAgentProviderError",
+                "error_message": (
+                    "Groq model invocation failed: tool call validation failed: "
+                    "parameters for tool mock_execute_trade did not match schema: "
+                    "missing properties: side, quantity; code: tool_use_failed"
+                ),
+                "traceback": "traceback text",
+                "runner_return": None,
+            }
+        ]
+    )
+
+    runs = normalize_task_runs(summary)
+
+    assert runs[0].outcome == "TOOL_SCHEMA_MISMATCH"

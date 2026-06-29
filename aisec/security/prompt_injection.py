@@ -642,7 +642,96 @@ class PromptInjectionDetector:
         self.log_raw_text = log_raw_text
 
         self.normalizer = TextNormalizer(max_text_len=max_text_len)
-        self.rules = PromptInjectionPatterns.build()
+        self.rules = list(PromptInjectionPatterns.build())
+
+        Rule = type(self.rules[0])
+        self.rules.extend([
+            Rule(
+                "real_agent_override_previous_safety_policy",
+                InjectionType.DIRECT_INJECTION,
+                re.compile(
+                    r"override\s+(the\s+)?(previous|prior|existing|normal)\s+"
+                    r"(safety\s+)?(policy|policies|rules?|instructions?)",
+                    re.IGNORECASE,
+                ),
+                0.80,
+                InjectionSeverity.HIGH,
+                "Attempt to override an existing safety policy or instruction set.",
+            ),
+            Rule(
+                "real_agent_ignore_all_safety_instructions",
+                InjectionType.DIRECT_INJECTION,
+                re.compile(
+                    r"ignore\s+(all\s+)?(safety|security|system)\s+"
+                    r"(instructions?|rules?|polic(?:y|ies))",
+                    re.IGNORECASE,
+                ),
+                0.80,
+                InjectionSeverity.HIGH,
+                "Attempt to ignore safety or system instructions.",
+            ),
+            Rule(
+                "real_agent_forget_safety_instructions",
+                InjectionType.DIRECT_INJECTION,
+                re.compile(
+                    r"forget\s+(the\s+)?(safety|security|system|previous|prior)\s+"
+                    r"(instructions?|rules?|polic(?:y|ies))",
+                    re.IGNORECASE,
+                ),
+                0.80,
+                InjectionSeverity.HIGH,
+                "Attempt to make the agent forget safety instructions.",
+            ),
+            Rule(
+                "real_agent_bypass_previous_rule",
+                InjectionType.DIRECT_INJECTION,
+                re.compile(
+                    r"bypass\s+(the\s+)?(previous|prior|existing|normal)\s+"
+                    r"(rule|rules|policy|policies|instruction|instructions)",
+                    re.IGNORECASE,
+                ),
+                0.80,
+                InjectionSeverity.HIGH,
+                "Attempt to bypass an existing rule or policy.",
+            ),
+            Rule(
+                "real_agent_policy_engine_override",
+                InjectionType.CONTEXT_MANIPULATION,
+                re.compile(
+                    r"override\s+(the\s+)?policy\s+engine|"
+                    r"approve\s+(this\s+)?change\s+without\s+review",
+                    re.IGNORECASE,
+                ),
+                0.80,
+                InjectionSeverity.HIGH,
+                "Attempt to manipulate policy-engine or review context.",
+            ),
+            Rule(
+                "real_agent_instruction_hierarchy_bypass",
+                InjectionType.CONTEXT_MANIPULATION,
+                re.compile(
+                    r"bypass\s+(the\s+)?(normal\s+)?instruction\s+hierarchy|"
+                    r"treat\s+(this|the)\s+(note|report|document|page)\s+as\s+"
+                    r"(controlling|higher\s+priority)",
+                    re.IGNORECASE,
+                ),
+                0.80,
+                InjectionSeverity.HIGH,
+                "Attempt to replace the instruction hierarchy with untrusted content.",
+            ),
+            Rule(
+                "real_agent_system_instruction_trust_only_content",
+                InjectionType.DIRECT_INJECTION,
+                re.compile(
+                    r"ignore\s+(the\s+)?system\s+instructions?.*trust\s+only\s+"
+                    r"(this|the)\s+(report|note|document|page)",
+                    re.IGNORECASE,
+                ),
+                0.80,
+                InjectionSeverity.HIGH,
+                "Attempt to ignore system instructions and trust untrusted content.",
+            ),
+        ])
 
         self._cache_size = max(0, cache_size)
         self._cache: OrderedDict[str, InjectionDetectionResult] = OrderedDict()
