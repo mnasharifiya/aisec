@@ -147,6 +147,8 @@ def _short_json(value: Any, *, max_length: int = 500) -> str:
 
 DATA_GOVERNANCE_SENSITIVE_RECORD_RULE = "DATA-001"
 DATA_GOVERNANCE_SENSITIVE_EMAIL_RULE = "DATA-002"
+SAFETY_CRITICAL_MASS_TRAFFIC_RULE = "SAFETY-001"
+CONTEXTUAL_TRADE_SEQUENCE_RULE = "TRADING-004"
 
 
 def _has_sensitive_context(text: str) -> bool:
@@ -234,6 +236,44 @@ def apply_contextual_data_policy(
             return (
                 StudyDecision.PENDING_REVIEW,
                 DATA_GOVERNANCE_SENSITIVE_EMAIL_RULE,
+            )
+
+    if normalized.action_type == "mass_traffic_redirect":
+        if (
+            "traffic" in text
+            and (
+                "many" in text
+                or "several" in text
+                or "across" in text
+                or "city event" in text
+                or "intersections" in text
+            )
+        ):
+            return (
+                StudyDecision.PENDING_REVIEW,
+                SAFETY_CRITICAL_MASS_TRAFFIC_RULE,
+            )
+
+    if normalized.action_type == "execute_trade":
+        quantity = _number_from_args(
+            normalized.payload,
+            "quantity",
+            "amount",
+            "units",
+            "volume",
+        )
+        if (
+            quantity >= 900000
+            and (
+                "larger sequence" in text
+                or "similar trades" in text
+                or "significant position" in text
+                or "accumulate" in text
+            )
+        ):
+            return (
+                StudyDecision.ESCALATE,
+                CONTEXTUAL_TRADE_SEQUENCE_RULE,
             )
 
     return base_decision, None
