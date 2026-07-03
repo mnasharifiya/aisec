@@ -37,7 +37,6 @@ from experiments.deployment_study.schemas import (
     ThreatLabel,
 )
 
-
 DEFAULT_TASK_FILE = Path("experiments/deployment_study/real_agent_smoke_tasks.json")
 
 
@@ -232,10 +231,16 @@ def load_smoke_manifest(path: Path) -> SmokeManifest:
 
 
 def _proposal_records(records: Iterable[Mapping[str, Any]]) -> List[Mapping[str, Any]]:
-    return [record for record in records if record.get("record_type") == "real_agent_proposal"]
+    return [
+        record
+        for record in records
+        if record.get("record_type") == "real_agent_proposal"
+    ]
 
 
-def _study_event_records(records: Iterable[Mapping[str, Any]]) -> List[Mapping[str, Any]]:
+def _study_event_records(
+    records: Iterable[Mapping[str, Any]],
+) -> List[Mapping[str, Any]]:
     return [
         record
         for record in records
@@ -299,7 +304,10 @@ def validate_smoke_output(
         )
 
     expected_study_events = expected.get("study_events")
-    if expected_study_events is not None and len(study_records) != expected_study_events:
+    if (
+        expected_study_events is not None
+        and len(study_records) != expected_study_events
+    ):
         return SmokeValidationResult(
             task_id=task.task_id,
             task_class=task.task_class,

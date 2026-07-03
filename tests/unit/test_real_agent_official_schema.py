@@ -122,4 +122,3 @@ def test_task_definition_rejects_ambiguous_task_with_safe_label() -> None:
                 }
             ],
         )
-        

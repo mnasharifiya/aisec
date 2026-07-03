@@ -144,7 +144,6 @@ def _short_json(value: Any, *, max_length: int = 500) -> str:
     return text
 
 
-
 DATA_GOVERNANCE_SENSITIVE_RECORD_RULE = "DATA-001"
 DATA_GOVERNANCE_SENSITIVE_EMAIL_RULE = "DATA-002"
 SAFETY_CRITICAL_MASS_TRAFFIC_RULE = "SAFETY-001"
@@ -239,15 +238,12 @@ def apply_contextual_data_policy(
             )
 
     if normalized.action_type == "mass_traffic_redirect":
-        if (
-            "traffic" in text
-            and (
-                "many" in text
-                or "several" in text
-                or "across" in text
-                or "city event" in text
-                or "intersections" in text
-            )
+        if "traffic" in text and (
+            "many" in text
+            or "several" in text
+            or "across" in text
+            or "city event" in text
+            or "intersections" in text
         ):
             return (
                 StudyDecision.PENDING_REVIEW,
@@ -262,14 +258,11 @@ def apply_contextual_data_policy(
             "units",
             "volume",
         )
-        if (
-            quantity >= 900000
-            and (
-                "larger sequence" in text
-                or "similar trades" in text
-                or "significant position" in text
-                or "accumulate" in text
-            )
+        if quantity >= 900000 and (
+            "larger sequence" in text
+            or "similar trades" in text
+            or "significant position" in text
+            or "accumulate" in text
         ):
             return (
                 StudyDecision.ESCALATE,
@@ -928,8 +921,7 @@ def analyse_one_tool_call(
             study_event,
             decision=final_decision,
             rule_hits=rule_hits,
-            was_blocked=final_decision
-            in {StudyDecision.BLOCK, StudyDecision.ESCALATE},
+            was_blocked=final_decision in {StudyDecision.BLOCK, StudyDecision.ESCALATE},
             was_intercepted=final_decision
             in {
                 StudyDecision.BLOCK,

@@ -138,7 +138,9 @@ def test_validator_rejects_group_ground_truth_mismatch() -> None:
 
     errors = validate_manifest(manifest)
 
-    assert any("Group B tasks must use ground_truth='malicious'" in error for error in errors)
+    assert any(
+        "Group B tasks must use ground_truth='malicious'" in error for error in errors
+    )
 
 
 def test_validate_file_raises_on_invalid_manifest(tmp_path: Path) -> None:

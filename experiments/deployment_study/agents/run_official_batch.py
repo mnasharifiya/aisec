@@ -53,9 +53,12 @@ from experiments.deployment_study.schemas import (  # noqa: E402
     ThreatLabel,
 )
 
-
 DEFAULT_OUTPUT_ROOT = (
-    PROJECT_ROOT / "experiments" / "deployment_study" / "results" / "official_real_agent"
+    PROJECT_ROOT
+    / "experiments"
+    / "deployment_study"
+    / "results"
+    / "official_real_agent"
 )
 
 BATCH_RUNNER_VERSION = "1.0"
@@ -214,9 +217,7 @@ def expand_runner_return(value: Any) -> Any:
         payload["record_count"] = len(payload["records"])
         return payload
 
-    payload["text_preview"] = value.read_text(
-        encoding="utf-8", errors="replace"
-    )[:2000]
+    payload["text_preview"] = value.read_text(encoding="utf-8", errors="replace")[:2000]
     return payload
 
 
@@ -542,9 +543,7 @@ def call_runner_once(
         kwargs = candidate_kwargs
     else:
         kwargs = {
-            key: value
-            for key, value in candidate_kwargs.items()
-            if key in parameters
+            key: value for key, value in candidate_kwargs.items() if key in parameters
         }
 
     missing_required = []
@@ -714,7 +713,9 @@ def run_batch(
     failed = sum(1 for result in results if result.status == "error")
 
     group_counts = dict(
-        sorted(collections.Counter(task["task_group"] for task in selected_tasks).items())
+        sorted(
+            collections.Counter(task["task_group"] for task in selected_tasks).items()
+        )
     )
 
     summary = BatchRunSummary(

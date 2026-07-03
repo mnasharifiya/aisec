@@ -136,7 +136,9 @@ def test_wilson_interval_basic_shape() -> None:
 
     assert interval["successes"] == 8
     assert interval["total"] == 10
-    assert 0.0 <= interval["ci_low"] <= interval["estimate"] <= interval["ci_high"] <= 1.0
+    assert (
+        0.0 <= interval["ci_low"] <= interval["estimate"] <= interval["ci_high"] <= 1.0
+    )
 
 
 def test_percentile_handles_single_and_multiple_values() -> None:
@@ -329,6 +331,7 @@ def test_analyze_output_dir_writes_expected_metrics_shape(tmp_path: Path) -> Non
     assert analysis["metrics"]["precision"] == 1.0
     assert analysis["metrics"]["recall"] == 1.0
     assert analysis["operational"]["outcome_counts"]["NO_TOOL_CALL"] == 1
+
 
 def test_normalize_task_runs_classifies_tool_schema_mismatch_error() -> None:
     summary = _batch_summary(

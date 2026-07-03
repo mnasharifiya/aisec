@@ -310,8 +310,7 @@ def _validate_top_level(manifest: Mapping[str, Any], errors: list[str]) -> None:
 
     if manifest.get("status") not in VALID_MANIFEST_STATUSES:
         errors.append(
-            "manifest.status: must be one of "
-            f"{sorted(VALID_MANIFEST_STATUSES)}"
+            "manifest.status: must be one of " f"{sorted(VALID_MANIFEST_STATUSES)}"
         )
 
     if manifest.get("default_model_provider") not in _enum_values(ModelProvider):
@@ -336,7 +335,9 @@ def _validate_top_level(manifest: Mapping[str, Any], errors: list[str]) -> None:
         errors.append("manifest.tasks: must be a list")
 
 
-def _validate_group_truth_pairing(task: Mapping[str, Any], prefix: str, errors: list[str]) -> None:
+def _validate_group_truth_pairing(
+    task: Mapping[str, Any], prefix: str, errors: list[str]
+) -> None:
     group = task.get("task_group")
     ground_truth = task.get("ground_truth")
     threat_label = task.get("threat_label")
@@ -366,7 +367,9 @@ def _validate_group_truth_pairing(task: Mapping[str, Any], prefix: str, errors: 
         )
 
     if group == "D" and threat_label != ThreatLabel.CONTEXTUAL_RISK.value:
-        errors.append(f"{prefix}: Group D tasks must use threat_label='contextual_risk'")
+        errors.append(
+            f"{prefix}: Group D tasks must use threat_label='contextual_risk'"
+        )
 
     if group == "N" and threat_label != ThreatLabel.MALFORMED_OR_NO_TOOL.value:
         errors.append(
@@ -479,7 +482,9 @@ def _validate_failure_policy(policy: Any, prefix: str, errors: list[str]) -> Non
             errors.append(f"{policy_prefix}.{key}: must be a non-empty string")
 
 
-def _validate_prompt_design(task: Mapping[str, Any], prefix: str, errors: list[str]) -> None:
+def _validate_prompt_design(
+    task: Mapping[str, Any], prefix: str, errors: list[str]
+) -> None:
     group = task.get("task_group")
     prompt = task.get("prompt")
 
@@ -499,7 +504,9 @@ def _validate_prompt_design(task: Mapping[str, Any], prefix: str, errors: list[s
             )
 
     if group == "B":
-        has_injection_term = any(term in prompt_lower for term in GROUP_B_INJECTION_TERMS)
+        has_injection_term = any(
+            term in prompt_lower for term in GROUP_B_INJECTION_TERMS
+        )
         if not has_injection_term:
             errors.append(
                 f"{prefix}.prompt: Group B prompt does not contain a clear "
@@ -558,8 +565,12 @@ def _validate_task(task: Any, index: int, errors: list[str]) -> None:
         errors=errors,
     )
 
-    if isinstance(task.get("task_id"), str) and not task["task_id"].startswith("official_"):
-        errors.append(f"{prefix}.task_id: official task IDs must start with 'official_'")
+    if isinstance(task.get("task_id"), str) and not task["task_id"].startswith(
+        "official_"
+    ):
+        errors.append(
+            f"{prefix}.task_id: official task IDs must start with 'official_'"
+        )
 
     if task.get("task_group") not in _enum_values(ExperimentGroup):
         errors.append(
@@ -567,7 +578,9 @@ def _validate_task(task: Any, index: int, errors: list[str]) -> None:
         )
 
     if task.get("scenario") not in VALID_SCENARIOS:
-        errors.append(f"{prefix}.scenario: unsupported scenario {task.get('scenario')!r}")
+        errors.append(
+            f"{prefix}.scenario: unsupported scenario {task.get('scenario')!r}"
+        )
 
     if task.get("ground_truth") not in _enum_values(GroundTruth):
         errors.append(
@@ -592,7 +605,9 @@ def _validate_task(task: Any, index: int, errors: list[str]) -> None:
         errors.append(f"{prefix}.allowed_outcomes: must be a non-empty list")
     else:
         invalid_outcomes = sorted(
-            outcome for outcome in allowed_outcomes if outcome not in VALID_TASK_OUTCOMES
+            outcome
+            for outcome in allowed_outcomes
+            if outcome not in VALID_TASK_OUTCOMES
         )
         if invalid_outcomes:
             errors.append(
@@ -631,7 +646,10 @@ def _validate_task(task: Any, index: int, errors: list[str]) -> None:
 
     criteria = task.get("success_criteria")
     if isinstance(criteria, dict):
-        if task.get("task_group") == "N" and criteria.get("requires_tool_call") is not False:
+        if (
+            task.get("task_group") == "N"
+            and criteria.get("requires_tool_call") is not False
+        ):
             errors.append(
                 f"{prefix}.success_criteria.requires_tool_call: Group N should use false"
             )
@@ -684,9 +702,7 @@ def validate_manifest(manifest: Mapping[str, Any]) -> list[str]:
         _validate_task(task_item, index, errors)
 
     duplicates = sorted(
-        task_id
-        for task_id, count in collections.Counter(task_ids).items()
-        if count > 1
+        task_id for task_id, count in collections.Counter(task_ids).items() if count > 1
     )
     if duplicates:
         errors.append(f"manifest.tasks: duplicate task_id values {duplicates}")

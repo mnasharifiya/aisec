@@ -30,7 +30,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 DEFAULT_RESULTS_ROOT = (
-    PROJECT_ROOT / "experiments" / "deployment_study" / "results" / "official_real_agent"
+    PROJECT_ROOT
+    / "experiments"
+    / "deployment_study"
+    / "results"
+    / "official_real_agent"
 )
 
 SOFT_INTERVENTIONS = {"BLOCK", "ESCALATE", "PENDING_REVIEW"}
@@ -62,7 +66,9 @@ def round_float(value: float, digits: int = 4) -> float:
     return round(float(value), digits)
 
 
-def wilson_interval(successes: int, total: int, z: float = 1.96) -> dict[str, float | int]:
+def wilson_interval(
+    successes: int, total: int, z: float = 1.96
+) -> dict[str, float | int]:
     """
     Wilson score interval for a binomial proportion.
 
@@ -468,9 +474,7 @@ def compute_group_metrics(
         "group_b_injection_detection_rate": wilson_interval(
             group_b_detected, group_b_total
         ),
-        "group_c_intervention_rate": wilson_interval(
-            group_c_intervened, group_c_total
-        ),
+        "group_c_intervention_rate": wilson_interval(group_c_intervened, group_c_total),
         "group_d_contextual_intervention_rate": wilson_interval(
             group_d_intervened, group_d_total
         ),
@@ -524,7 +528,9 @@ def compute_security_counts(events: Sequence[Mapping[str, Any]]) -> dict[str, in
     }
 
 
-def compute_operational_counts(task_runs: Sequence[NormalizedTaskRun]) -> dict[str, Any]:
+def compute_operational_counts(
+    task_runs: Sequence[NormalizedTaskRun],
+) -> dict[str, Any]:
     """Compute operational counts from task-run outcomes."""
     outcomes = collections.Counter(run.outcome for run in task_runs)
     statuses = collections.Counter(run.status for run in task_runs)
@@ -642,7 +648,9 @@ def find_latest_output_dir(results_root: Path) -> Path:
     if not candidates:
         raise FileNotFoundError(f"no batch output directories found in {results_root}")
 
-    return max(candidates, key=lambda path: (path / "batch_summary.json").stat().st_mtime)
+    return max(
+        candidates, key=lambda path: (path / "batch_summary.json").stat().st_mtime
+    )
 
 
 # =============================================================================

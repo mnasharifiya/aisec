@@ -31,7 +31,9 @@ def _manifest() -> dict[str, Any]:
     return load_manifest(MANIFEST_PATH)
 
 
-def _config(tmp_path: Path, *, live: bool = False, repetitions: int = 1) -> BatchRunConfig:
+def _config(
+    tmp_path: Path, *, live: bool = False, repetitions: int = 1
+) -> BatchRunConfig:
     return BatchRunConfig(
         manifest_path=MANIFEST_PATH,
         output_root=tmp_path,
@@ -230,6 +232,7 @@ def test_summary_json_contains_reproducibility_metadata(tmp_path: Path) -> None:
     assert data["manifest"]["sha256"]
     assert "git_commit" in data["reproducibility"]
     assert "git_status_short" in data["reproducibility"]
+
 
 def test_path_runner_return_jsonl_records_are_embedded(tmp_path: Path) -> None:
     result_path = tmp_path / "runner_result.jsonl"
