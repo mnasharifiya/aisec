@@ -1,0 +1,138 @@
+{
+  "summary_id": "aisec-v1.7-frozen-real-agent-eval-001-security-groups-A-B-C-D-r01-r05-combined",
+  "manifest_status": "frozen",
+  "included_groups": [
+    "A",
+    "B",
+    "C",
+    "D"
+  ],
+  "note": "N/control tasks are reported separately because they are operational/no-tool controls and do not produce AISec-classified security events.",
+  "expected_valid_task_rounds": 225,
+  "valid_completed_task_rounds": 225,
+  "events_used_for_metrics": 273,
+  "confusion_matrix": {
+    "true_positives": 183,
+    "true_negatives": 50,
+    "false_positives": 0,
+    "false_negatives": 40
+  },
+  "metrics_valid_events_only": {
+    "precision": 1.0,
+    "recall": 0.820627802690583,
+    "f1_score": 0.9014778325123154,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.17937219730941703,
+    "accuracy": 0.8534798534798534
+  },
+  "operational_outcome_counts": {
+    "ALLOW": 60,
+    "RATE_LIMIT": 64,
+    "PENDING_REVIEW": 75,
+    "BLOCK": 65,
+    "ESCALATE": 25
+  },
+  "group_summaries": {
+    "A": {
+      "expected_valid_task_rounds": 50,
+      "valid_completed_task_rounds": 50,
+      "events_used_for_metrics": 50,
+      "confusion_matrix": {
+        "true_positives": 0,
+        "true_negatives": 50,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "metrics_valid_events_only": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1_score": 0.0,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.0,
+        "accuracy": 1.0
+      },
+      "operational_outcome_counts": {
+        "ALLOW": 50,
+        "RATE_LIMIT": 4
+      },
+      "missing_valid_task_rounds": []
+    },
+    "B": {
+      "expected_valid_task_rounds": 50,
+      "valid_completed_task_rounds": 50,
+      "events_used_for_metrics": 50,
+      "confusion_matrix": {
+        "true_positives": 50,
+        "true_negatives": 0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "metrics_valid_events_only": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.0,
+        "accuracy": 1.0
+      },
+      "operational_outcome_counts": {
+        "PENDING_REVIEW": 50,
+        "RATE_LIMIT": 4
+      },
+      "missing_valid_task_rounds": []
+    },
+    "C": {
+      "expected_valid_task_rounds": 75,
+      "valid_completed_task_rounds": 75,
+      "events_used_for_metrics": 75,
+      "confusion_matrix": {
+        "true_positives": 75,
+        "true_negatives": 0,
+        "false_positives": 0,
+        "false_negatives": 0
+      },
+      "metrics_valid_events_only": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 1.0,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.0,
+        "accuracy": 1.0
+      },
+      "operational_outcome_counts": {
+        "BLOCK": 50,
+        "ESCALATE": 15,
+        "PENDING_REVIEW": 10,
+        "RATE_LIMIT": 52
+      },
+      "missing_valid_task_rounds": []
+    },
+    "D": {
+      "expected_valid_task_rounds": 50,
+      "valid_completed_task_rounds": 50,
+      "events_used_for_metrics": 98,
+      "confusion_matrix": {
+        "true_positives": 58,
+        "true_negatives": 0,
+        "false_positives": 0,
+        "false_negatives": 40
+      },
+      "metrics_valid_events_only": {
+        "precision": 1.0,
+        "recall": 0.5918367346938775,
+        "f1_score": 0.7435897435897436,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.40816326530612246,
+        "accuracy": 0.5918367346938775
+      },
+      "operational_outcome_counts": {
+        "ALLOW": 10,
+        "BLOCK": 15,
+        "ESCALATE": 10,
+        "PENDING_REVIEW": 15,
+        "RATE_LIMIT": 4
+      },
+      "missing_valid_task_rounds": []
+    }
+  }
+}
