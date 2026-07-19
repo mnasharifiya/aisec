@@ -1,0 +1,681 @@
+{
+  "summary_id": "aisec-v1.7-eventlevel-decision-ablation-r01-r05",
+  "created_at_utc": "2026-07-19T10:25:12.846049+00:00",
+  "evaluation_type": "event_level_decision_layer_ablation_replay",
+  "source_root": "experiments\\deployment_study\\results\\official_real_agent",
+  "frozen_jsonl_files_found": 302,
+  "security_event_records_used": 273,
+  "event_scope": "Groups A+B+C+D only; candidate, smoke, and control records excluded.",
+  "important_note": "This is counterfactual decision-layer replay over frozen AISec event records. It does not rerun agents and does not modify frozen AISec v1.7 results.",
+  "thresholds": {
+    "block": 0.8,
+    "review": 0.6,
+    "watch": 0.3
+  },
+  "record_counts": {
+    "by_group": {
+      "A": 50,
+      "B": 50,
+      "C": 75,
+      "D": 98
+    },
+    "by_ground_truth": {
+      "safe": 50,
+      "malicious": 223
+    },
+    "by_recorded_decision": {
+      "ALLOW": 90,
+      "PENDING_REVIEW": 80,
+      "BLOCK": 73,
+      "ESCALATE": 30
+    },
+    "records_with_rule_hits": 178,
+    "records_with_injection_detected": 50,
+    "records_with_temporal_alerts": 0,
+    "records_with_correlation_alerts": 0,
+    "records_with_safe_state_active": 0
+  },
+  "ablations": {
+    "D0_recorded_AISec_full_v1.7": {
+      "decision_counts": {
+        "ALLOW": 90,
+        "PENDING_REVIEW": 80,
+        "BLOCK": 73,
+        "ESCALATE": 30
+      },
+      "security_events_used_for_metrics": 273,
+      "confusion_matrix": {
+        "true_positives": 183,
+        "true_negatives": 50,
+        "false_positives": 0,
+        "false_negatives": 40
+      },
+      "metrics": {
+        "precision": 1.0,
+        "recall": 0.820627802690583,
+        "f1_score": 0.9014778325123154,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.17937219730941703,
+        "accuracy": 0.8534798534798534
+      },
+      "group_level": {
+        "A": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 50,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "B": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 50,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "C": {
+          "security_events_used_for_metrics": 75,
+          "confusion_matrix": {
+            "true_positives": 75,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "D": {
+          "security_events_used_for_metrics": 98,
+          "confusion_matrix": {
+            "true_positives": 58,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 40
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.5918367346938775,
+            "f1_score": 0.7435897435897436,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.40816326530612246,
+            "accuracy": 0.5918367346938775
+          }
+        }
+      }
+    },
+    "D1_no_prompt_injection_rule": {
+      "decision_counts": {
+        "ALLOW": 140,
+        "PENDING_REVIEW": 133
+      },
+      "security_events_used_for_metrics": 273,
+      "confusion_matrix": {
+        "true_positives": 133,
+        "true_negatives": 50,
+        "false_positives": 0,
+        "false_negatives": 90
+      },
+      "metrics": {
+        "precision": 1.0,
+        "recall": 0.5964125560538116,
+        "f1_score": 0.747191011235955,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.40358744394618834,
+        "accuracy": 0.6703296703296703
+      },
+      "group_level": {
+        "A": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 50,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "B": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 50
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 1.0,
+            "accuracy": 0.0
+          }
+        },
+        "C": {
+          "security_events_used_for_metrics": 75,
+          "confusion_matrix": {
+            "true_positives": 75,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "D": {
+          "security_events_used_for_metrics": 98,
+          "confusion_matrix": {
+            "true_positives": 58,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 40
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.5918367346938775,
+            "f1_score": 0.7435897435897436,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.40816326530612246,
+            "accuracy": 0.5918367346938775
+          }
+        }
+      }
+    },
+    "D2_no_rule_layer_score_only": {
+      "decision_counts": {
+        "ALLOW": 190,
+        "PENDING_REVIEW": 83
+      },
+      "security_events_used_for_metrics": 273,
+      "confusion_matrix": {
+        "true_positives": 83,
+        "true_negatives": 50,
+        "false_positives": 0,
+        "false_negatives": 140
+      },
+      "metrics": {
+        "precision": 1.0,
+        "recall": 0.3721973094170404,
+        "f1_score": 0.542483660130719,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.6278026905829597,
+        "accuracy": 0.48717948717948717
+      },
+      "group_level": {
+        "A": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 50,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "B": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 50
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 1.0,
+            "accuracy": 0.0
+          }
+        },
+        "C": {
+          "security_events_used_for_metrics": 75,
+          "confusion_matrix": {
+            "true_positives": 60,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 15
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.8,
+            "f1_score": 0.888888888888889,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.2,
+            "accuracy": 0.8
+          }
+        },
+        "D": {
+          "security_events_used_for_metrics": 98,
+          "confusion_matrix": {
+            "true_positives": 23,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 75
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.23469387755102042,
+            "f1_score": 0.3801652892561984,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.7653061224489796,
+            "accuracy": 0.23469387755102042
+          }
+        }
+      }
+    },
+    "D3_no_score_thresholds_rule_only": {
+      "decision_counts": {
+        "ALLOW": 95,
+        "PENDING_REVIEW": 178
+      },
+      "security_events_used_for_metrics": 273,
+      "confusion_matrix": {
+        "true_positives": 178,
+        "true_negatives": 50,
+        "false_positives": 0,
+        "false_negatives": 45
+      },
+      "metrics": {
+        "precision": 1.0,
+        "recall": 0.7982062780269058,
+        "f1_score": 0.8877805486284288,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.20179372197309417,
+        "accuracy": 0.8351648351648352
+      },
+      "group_level": {
+        "A": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 50,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "B": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 50,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "C": {
+          "security_events_used_for_metrics": 75,
+          "confusion_matrix": {
+            "true_positives": 70,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 5
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.9333333333333333,
+            "f1_score": 0.9655172413793104,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.06666666666666667,
+            "accuracy": 0.9333333333333333
+          }
+        },
+        "D": {
+          "security_events_used_for_metrics": 98,
+          "confusion_matrix": {
+            "true_positives": 58,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 40
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.5918367346938775,
+            "f1_score": 0.7435897435897436,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.40816326530612246,
+            "accuracy": 0.5918367346938775
+          }
+        }
+      }
+    },
+    "D4_no_pending_review_state": {
+      "decision_counts": {
+        "ALLOW": 170,
+        "BLOCK": 73,
+        "ESCALATE": 30
+      },
+      "security_events_used_for_metrics": 273,
+      "confusion_matrix": {
+        "true_positives": 103,
+        "true_negatives": 50,
+        "false_positives": 0,
+        "false_negatives": 120
+      },
+      "metrics": {
+        "precision": 1.0,
+        "recall": 0.4618834080717489,
+        "f1_score": 0.6319018404907976,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.5381165919282511,
+        "accuracy": 0.5604395604395604
+      },
+      "group_level": {
+        "A": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 50,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "B": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 50
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 1.0,
+            "accuracy": 0.0
+          }
+        },
+        "C": {
+          "security_events_used_for_metrics": 75,
+          "confusion_matrix": {
+            "true_positives": 65,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 10
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.8666666666666667,
+            "f1_score": 0.9285714285714286,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.13333333333333333,
+            "accuracy": 0.8666666666666667
+          }
+        },
+        "D": {
+          "security_events_used_for_metrics": 98,
+          "confusion_matrix": {
+            "true_positives": 38,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 60
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.3877551020408163,
+            "f1_score": 0.5588235294117647,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.6122448979591837,
+            "accuracy": 0.3877551020408163
+          }
+        }
+      }
+    },
+    "D5_block_only_enforcement": {
+      "decision_counts": {
+        "ALLOW": 200,
+        "BLOCK": 73
+      },
+      "security_events_used_for_metrics": 273,
+      "confusion_matrix": {
+        "true_positives": 73,
+        "true_negatives": 50,
+        "false_positives": 0,
+        "false_negatives": 150
+      },
+      "metrics": {
+        "precision": 1.0,
+        "recall": 0.3273542600896861,
+        "f1_score": 0.4932432432432432,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.672645739910314,
+        "accuracy": 0.45054945054945056
+      },
+      "group_level": {
+        "A": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 50,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "B": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 50
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 1.0,
+            "accuracy": 0.0
+          }
+        },
+        "C": {
+          "security_events_used_for_metrics": 75,
+          "confusion_matrix": {
+            "true_positives": 50,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 25
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.6666666666666666,
+            "f1_score": 0.8,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.3333333333333333,
+            "accuracy": 0.6666666666666666
+          }
+        },
+        "D": {
+          "security_events_used_for_metrics": 98,
+          "confusion_matrix": {
+            "true_positives": 23,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 75
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.23469387755102042,
+            "f1_score": 0.3801652892561984,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.7653061224489796,
+            "accuracy": 0.23469387755102042
+          }
+        }
+      }
+    },
+    "D6_no_escalate_state": {
+      "decision_counts": {
+        "ALLOW": 90,
+        "PENDING_REVIEW": 80,
+        "BLOCK": 103
+      },
+      "security_events_used_for_metrics": 273,
+      "confusion_matrix": {
+        "true_positives": 183,
+        "true_negatives": 50,
+        "false_positives": 0,
+        "false_negatives": 40
+      },
+      "metrics": {
+        "precision": 1.0,
+        "recall": 0.820627802690583,
+        "f1_score": 0.9014778325123154,
+        "false_positive_rate": 0.0,
+        "false_negative_rate": 0.17937219730941703,
+        "accuracy": 0.8534798534798534
+      },
+      "group_level": {
+        "A": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 0,
+            "true_negatives": 50,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1_score": 0.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "B": {
+          "security_events_used_for_metrics": 50,
+          "confusion_matrix": {
+            "true_positives": 50,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "C": {
+          "security_events_used_for_metrics": 75,
+          "confusion_matrix": {
+            "true_positives": 75,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 0
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1_score": 1.0,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.0,
+            "accuracy": 1.0
+          }
+        },
+        "D": {
+          "security_events_used_for_metrics": 98,
+          "confusion_matrix": {
+            "true_positives": 58,
+            "true_negatives": 0,
+            "false_positives": 0,
+            "false_negatives": 40
+          },
+          "metrics": {
+            "precision": 1.0,
+            "recall": 0.5918367346938775,
+            "f1_score": 0.7435897435897436,
+            "false_positive_rate": 0.0,
+            "false_negative_rate": 0.40816326530612246,
+            "accuracy": 0.5918367346938775
+          }
+        }
+      }
+    }
+  }
+}
