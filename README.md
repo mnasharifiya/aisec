@@ -11,7 +11,7 @@
 
 Built on the research framework:
 
-A Layered Cybersecurity Framework for Enforcing Human Control over Advanced Autonomous Systems
+Layered Cybersecurity Framework for Enforcing Human Control over Autonomous AI
 
 Muhammad Muttaka, Astana IT University, 2025.
 
