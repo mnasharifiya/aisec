@@ -1,4 +1,4 @@
-# AISec — Runtime Security Monitoring for Autonomous AI Agents
+# Runtime security and policy enforcement for tool-using autonomous AI agents
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
